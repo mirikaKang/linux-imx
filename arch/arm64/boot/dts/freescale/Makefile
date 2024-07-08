@@ -98,6 +98,7 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mm-var-dart-dt8mcustomboard.dtb \
 			  imx8mm-var-dart-dt8mcustomboard-m4.dtb \
 			  imx8mm-var-som-symphony.dtb imx8mm-var-som-symphony-m4.dtb
 
+
 imx8mm-var-dart-1.x-dt8mcustomboard-dtbs := imx8mm-var-dart-dt8mcustomboard.dtb imx8mm-var-dart-1.x.dtbo
 imx8mm-var-dart-1.x-dt8mcustomboard-m4-dtbs := imx8mm-var-dart-dt8mcustomboard-m4.dtb imx8mm-var-dart-1.x.dtbo
 
@@ -268,6 +269,9 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mp-evk-revb4-ndm.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-evk-revb4-sof-wm8962.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-evk-revb4-rpmsg.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-evk-revb4-rpmsg-lpv.dtb
+
+# SDT NODEV 
+dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-dart-dt8mcustomboard-nodev-isi.dtb
 
 dtb-$(CONFIG_ARCH_MXC) += imx8mq-evk.dtb imx8mq-evk-rpmsg.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mq-evk.dtb imx8mq-evk-rpmsg.dtb imx8mq-evk-pcie1-m2.dtb imx8mq-evk-usd-wifi.dtb \

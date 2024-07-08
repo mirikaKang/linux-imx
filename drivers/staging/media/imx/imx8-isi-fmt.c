@@ -97,6 +97,17 @@ struct mxc_isi_fmt mxc_isi_out_formats[] = {
 		.colplanes	= 1,
 		.align		= 2,
 		.mbus_code	= MEDIA_BUS_FMT_RGB888_1X24,
+	},
+	 {
+		// by SDT
+		.name		= "YUV 4:2:2 separated 3-planar, YCbYCr",
+		.fourcc		= V4L2_PIX_FMT_YUV422P,
+		.depth		= { 8,4,4 },
+		.color		= MXC_ISI_OUT_FMT_YUV422_3P8P,
+		.memplanes	= 3,
+		.colplanes	= 3,
+		.align		= 3,
+		.mbus_code	= MEDIA_BUS_FMT_YUYV8_1X16,
 	}
 };
 

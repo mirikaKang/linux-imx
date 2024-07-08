@@ -32,6 +32,26 @@
 #include "imx8-common.h"
 #include "imx8-isi-fmt.h"
 
+#define ISI_DRIVER_NAME "isi-cap"
+
+//for internel driver debug
+#define DEV_DBG_EN 1
+#if (DEV_DBG_EN == 1)
+#define csi_dev_dbg(x, arg...)                                                 \
+	printk("[CAM_DEBUG][%s]"                                               \
+	       "[%06d]" x,                                                     \
+	       ISI_DRIVER_NAME, __LINE__, ##arg)
+#else
+#define csi_dev_dbg(x, arg...)
+#endif
+#define csi_dev_err(x, arg...)                                                 \
+	printk(KERN_ERR "[CAM_ERR][$s]"                                        \
+			"[%06d]" x,                                            \
+	       ISI_DRIVER_NAME, __LINE__, ##arg)
+#define csi_dev_print(x, arg...)                                               \
+	printk(KERN_INFO "[CAM][%s][%d]" x, ISI_DRIVER_NAME, __LINE__, ##arg)
+
+
 #define sd_to_cap_dev(ptr)	container_of(ptr, struct mxc_isi_cap_dev, sd)
 static int mxc_isi_cap_streamoff(struct file *file, void *priv,
 				 enum v4l2_buf_type type);
@@ -92,6 +112,8 @@ struct mxc_isi_fmt *mxc_isi_get_src_fmt(struct v4l2_subdev_format *sd_fmt)
 {
 	u32 index;
 
+	
+
 	/* two fmt RGB32 and YUV444 from pixellink */
 	if (sd_fmt->format.code == MEDIA_BUS_FMT_YUYV8_1X16 ||
 	    sd_fmt->format.code == MEDIA_BUS_FMT_YVYU8_2X8 ||
@@ -122,6 +144,8 @@ static int mxc_isi_pipeline_enable(struct mxc_isi_cap_dev *isi_cap, bool enable)
 	struct v4l2_subdev *subdev;
 	int ret = 0;
 
+	csi_dev_dbg("enter %s\n",__func__);
+
 	mutex_lock(&mdev->graph_mutex);
 
 	ret = media_graph_walk_init(&graph, entity->graph_obj.mdev);
@@ -132,6 +156,9 @@ static int mxc_isi_pipeline_enable(struct mxc_isi_cap_dev *isi_cap, bool enable)
 	media_graph_walk_start(&graph, entity);
 
 	while ((entity = media_graph_walk_next(&graph))) {
+
+		dev_dbg(dev, "entity name is %s \n", entity->name);
+
 		if (!entity) {
 			dev_dbg(dev, "entity is NULL\n");
 			continue;
@@ -148,6 +175,7 @@ static int mxc_isi_pipeline_enable(struct mxc_isi_cap_dev *isi_cap, bool enable)
 			continue;
 		}
 
+		csi_dev_dbg("[%s] --------------- \n",__func__);
 		ret = v4l2_subdev_call(subdev, video, s_stream, enable);
 		if (ret < 0 && ret != -ENOIOCTLCMD) {
 			dev_err(dev, "subdev %s s_stream failed\n", subdev->name);
@@ -156,7 +184,7 @@ static int mxc_isi_pipeline_enable(struct mxc_isi_cap_dev *isi_cap, bool enable)
 	}
 	mutex_unlock(&mdev->graph_mutex);
 	media_graph_walk_cleanup(&graph);
-
+	csi_dev_dbg("exit %s\n",__func__);
 	return ret;
 }
 
@@ -930,6 +958,8 @@ static int mxc_isi_cap_try_fmt_mplane(struct file *file, void *fh,
 {
 	struct mxc_isi_cap_dev *isi_cap = video_drvdata(file);
 	struct v4l2_pix_format_mplane *pix = &f->fmt.pix_mp;
+
+	csi_dev_dbg("enter %s\n",__func__);
 
 	mxc_isi_cap_fmt_try(isi_cap, pix);
 	return 0;
