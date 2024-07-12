@@ -5,4 +5,7 @@ config SDT_MIPI_CSI2_4LANE_4K_CAM
 	select NON_I2C_CAMERA_DEVICE
 	default m
 
+config NON_I2C_CAMERA_DEVICE
+	bool
+
 endmenu
