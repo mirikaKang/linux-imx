@@ -30,6 +30,11 @@
 
 #define DRIVER_NAME	"nodev"
 
+#define NODE_V_PIXEL_ARRAY_TOP      0
+#define NODE_V_PIXEL_ARRAY_LEFT     0
+#define NODE_V_PIXEL_ARRAY_WIDTH    3840
+#define NODE_V_PIXEL_ARRAY_HEIGHT   2160
+
 //for internel driver debug
 #define DEV_DBG_EN 1
 #if (DEV_DBG_EN == 1)
@@ -47,6 +52,18 @@
 #define csi_dev_print(x, arg...)                                               \
 	printk(KERN_INFO "[CAM][%s][%d]" x, DRIVER_NAME, __LINE__, ##arg)
 
+
+static const struct v4l2_mbus_framefmt node_v_default_fmt = {
+    .code = MEDIA_BUS_FMT_UYVY8_2X8,
+    .width = 3840,
+    .height = 2160,
+    .colorspace = V4L2_COLORSPACE_SRGB,
+    .ycbcr_enc = V4L2_MAP_YCBCR_ENC_DEFAULT(V4L2_COLORSPACE_SRGB),
+    .quantization = V4L2_QUANTIZATION_FULL_RANGE,
+    .xfer_func = V4L2_MAP_XFER_FUNC_DEFAULT(V4L2_COLORSPACE_SRGB),
+    .field = V4L2_FIELD_NONE,
+    .reserved[1] = 30,
+};
 
 /*
  * FIXME: remove this when a subdev API becomes available
@@ -111,7 +128,7 @@ static int  node_v_g_frame_interval(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 
@@ -120,7 +137,7 @@ static int node_v_s_frame_interval(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 
@@ -128,7 +145,7 @@ static int node_v_s_stream(struct v4l2_subdev *sd, int enable)
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 
@@ -139,8 +156,19 @@ static int node_v_init_cfg(struct v4l2_subdev *sd,
                struct v4l2_subdev_state *state)
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
+    struct v4l2_mbus_framefmt *fmt =
+                v4l2_subdev_get_try_format(sd, state, 0);
+    struct v4l2_rect *crop = v4l2_subdev_get_try_crop(sd, state, 0);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
+
+    *fmt = node_v_default_fmt;
+
+    crop->left = NODE_V_PIXEL_ARRAY_LEFT;
+    crop->top = NODE_V_PIXEL_ARRAY_TOP;
+    crop->width = NODE_V_PIXEL_ARRAY_WIDTH;
+    crop->height = NODE_V_PIXEL_ARRAY_HEIGHT;
+
     return 0;
 
 }
@@ -148,9 +176,15 @@ static int node_v_enum_mbus_code(struct v4l2_subdev *sd,
                  struct v4l2_subdev_state *sd_state,
                  struct v4l2_subdev_mbus_code_enum *code)
 {
-    struct node_v_dev *sensor = to_node_v_dev(sd);
+    dev_info(sd->dev, "%s enter\n", __func__);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    // index should be 0, but should we make error for this?
+    if (code->index != 0)
+        return -EINVAL;
+
+    // We only support YUYV MBUS format.
+    code->code = MEDIA_BUS_FMT_UYVY8_2X8;
+
     return 0;
 }
 static int node_v_get_fmt(struct v4l2_subdev *sd,
@@ -159,7 +193,14 @@ static int node_v_get_fmt(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
+
+    if (format->pad != 0)
+        return -EINVAL;
+
+    /* currenty we only support default format */
+    format->format = node_v_default_fmt;
+
     return 0;
 }
 
@@ -169,7 +210,7 @@ static int node_v_set_fmt(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 
@@ -179,7 +220,7 @@ static int node_v_get_selection(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 static int node_v_enum_frame_size(struct v4l2_subdev *sd,
@@ -188,7 +229,20 @@ static int node_v_enum_frame_size(struct v4l2_subdev *sd,
 {
     struct node_v_dev *sensor = to_node_v_dev(sd);
 
-    dev_info(&sensor->pdev->dev, "%s enter\n", __func__);
+    dev_info(sd->dev, "%s enter\n", __func__);
+
+    if (fse->pad != 0)
+        return -EINVAL;
+    /* We only support 1 format/resolution */
+    if (fse->index > 0)
+        return -EINVAL;
+
+    // We only support this resolution */
+    fse->min_width = 3840;
+    fse->max_width = 3840;
+    fse->min_height = 2160;
+    fse->max_height = 2160;
+
     return 0;
 }
 
@@ -196,6 +250,7 @@ static int node_v_enum_frame_interval(struct v4l2_subdev *sd,
     struct v4l2_subdev_state *sd_state,
     struct v4l2_subdev_frame_interval_enum *fie)
 {
+    dev_info(sd->dev, "%s enter\n", __func__);
     return 0;
 }
 
