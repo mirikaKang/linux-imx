@@ -1027,10 +1027,17 @@ static int register_sensor_entities(struct mxc_md *mxc_md)
 		 */
 		client = of_find_i2c_device_by_node(rem);
 		if (!client) {
+#if CONFIG_NON_I2C_CAMERA_DEVICE
+			// ksw: There can be no i2c drivers so be it.
+			v4l2_info(&mxc_md->v4l2_dev,
+				  "Can't find i2c client device for %s, but continue to install.\n",
+				  of_node_full_name(rem));
+#else
 			v4l2_info(&mxc_md->v4l2_dev,
 				  "Can't find i2c client device for %s\n",
 				  of_node_full_name(rem));
 			return -EPROBE_DEFER;
+#endif
 		}
 
 		mxc_md->sensor[index].fwnode = of_fwnode_handle(rem);

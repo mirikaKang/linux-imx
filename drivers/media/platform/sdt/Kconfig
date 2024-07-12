@@ -1,0 +1,8 @@
+menu "sdt node v platform Camera support"
+
+config SDT_MIPI_CSI2_4LANE_4K_CAM
+	tristate "SDT's MIPI CSI 4LANE 4K Camera"
+	select NON_I2C_CAMERA_DEVICE
+	default m
+
+endmenu

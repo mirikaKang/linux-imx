@@ -1,0 +1,1 @@
+obj-$(CONFIG_SDT_MIPI_CSI2_4LANE_4K_CAM) += nodev.o
