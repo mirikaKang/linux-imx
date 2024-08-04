@@ -1,7 +1,8 @@
 #!/bin/bash
 mkdir -p ../linux-out/
 mkdir -p ../linux-out/usr/modules
-make O=../linux-out imx8mp_var_dart_nodev_defconfig 
+make O=../linux-out imx8mp_var_abyz_yocto_defconfig 
+make O=../linux-out imx8mp_var_config_abyz_linux_defconfig 
 # make O=../linux-out imx8_var_defconfig 
 make O=../linux-out LOCALVERSION= Image -j4
 make O=../linux-out LOCALVERSION= dtbs

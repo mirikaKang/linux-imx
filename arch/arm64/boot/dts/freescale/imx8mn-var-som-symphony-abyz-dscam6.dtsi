@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2019 NXP
+ * Copyright 2020-2021 Variscite Ltd.
+ */
+
+&i2c2 {
+	/delete-node/ov5640_mipi1@3c;
+	
+};
+
+
+&i2c2{
+	dscam6@58{
+		compatible="abyz,dscam6";
+		reg=<0x58>;
+		csi_id=<0x00>;
+		/* mipi_csi;*/
+		mclk = <24000000>;
+		mclk_source = <0>;
+		mipi_csi;
+		status = "okay";
+	
+		port{
+			dscam6_ep_0:endpoint{
+				data-lanes = < 1 2 3 4>;
+				clock-lanes = <0>;
+				remote-endpoint = <&mipi1_sensor_ep>;
+			};
+		};
+	};
+
+};
+
+&mipi_csi_1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	port@0 {
+		reg = <0>;
+		mipi1_sensor_ep: endpoint {
+			remote-endpoint = <&dscam6_ep_0>;
+			data-lanes = <4>;
+			csis-hs-settle = <6>;
+			csis-clk-settle = <2>;
+			csis-wclk;
+		};
+	};
+};
+
+
+&cameradev {
+	status = "okay";
+};
+
+&isi_0 {
+	status = "okay";
+
+	cap_device {
+		status = "okay";
+	};
+};
+
