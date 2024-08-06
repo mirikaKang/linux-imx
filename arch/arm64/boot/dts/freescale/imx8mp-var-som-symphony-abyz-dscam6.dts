@@ -4,8 +4,8 @@
  * Copyright 2020-2021 Variscite Ltd.
  */
 
-#include "imx8mn-var-som-symphony.dts"
-#include "imx8mn-var-som-symphony-abyz-dscam6.dtsi"
+#include "imx8mp-var-som-symphony.dts"
+#include "imx8mp-var-som-symphony-abyz-dscam6.dtsi"
 / {
 	model = "Variscite DART-MX8M-PLUS on Sympony with H&Abyz Xray detector";
 };

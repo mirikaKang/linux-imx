@@ -52,24 +52,6 @@
 
 #define MIPI_CSIS_OF_NODE_NAME		"csi"
 
-//for internel driver debug
-#define DEV_DBG_EN 1
-#if (DEV_DBG_EN == 1)
-#define csi_dev_dbg(x, arg...)                                                 \
-	printk("[CAM_DEBUG][%s]"                                               \
-	       "[%06d]" x,                                                     \
-	       CSIS_DRIVER_NAME, __LINE__, ##arg)
-#else
-#define csi_dev_dbg(x, arg...)
-#endif
-#define csi_dev_err(x, arg...)                                                 \
-	printk(KERN_ERR "[CAM_ERR][$s]"                                        \
-			"[%06d]" x,                                            \
-	       CSIS_DRIVER_NAME, __LINE__, ##arg)
-#define csi_dev_print(x, arg...)                                               \
-	printk(KERN_INFO "[CAM][%s][%d]" x, CSIS_DRIVER_NAME, __LINE__, ##arg)
-
-
 #define MIPI_CSIS_VC0_PAD_SINK		0
 #define MIPI_CSIS_VC1_PAD_SINK		1
 #define MIPI_CSIS_VC2_PAD_SINK		2
@@ -434,10 +416,6 @@ struct csi_state {
 	u32 num_lanes;
 	u32 max_num_lanes;
 	u8 wclk_ext;
-
-	//by mirika 
-	u32 mipi_dphy_slave_control_h;
-	u32 mipi_dphy_slave_control_l;
 
 	u8 vchannel;
 	const struct csis_pix_format *csis_fmt;
@@ -808,34 +786,14 @@ static void __mipi_csis_set_format(struct csi_state *state)
 	}
 }
 
-static void __mipi_slave_control( struct csi_state *state)
-{
-	u32 val_h;
-	u32 val_l;
-	csi_dev_dbg("enter %s\n",__func__);
-	state->mipi_dphy_slave_control_h = g_dphy_slave_control_high;
-	state->mipi_dphy_slave_control_l = g_dphy_slave_control_low;
-	csi_dev_dbg("[%s] slave control register high =0x%.8x\n",__func__,state->mipi_dphy_slave_control_h);
-	csi_dev_dbg("[%s] slave control register low  =0x%.8x\n",__func__,state->mipi_dphy_slave_control_l);
-	mipi_csis_write(state,MIPI_CSIS_DPHYSCTRL_H,state->mipi_dphy_slave_control_h);
-	mipi_csis_write(state,MIPI_CSIS_DPHYSCTRL_L,state->mipi_dphy_slave_control_l);
-	val_h = mipi_csis_read( state, MIPI_CSIS_DPHYSCTRL_H);
-	val_l = mipi_csis_read( state, MIPI_CSIS_DPHYSCTRL_L);
-	csi_dev_dbg("[%s] MIPI_CSIS_DPHYSCTRL_H=0x%.8x, MIPI_CSIS_DPHYSCTRL_L=0x%.8x",__func__,val_h,val_l);
-
-}
-
 static void mipi_csis_set_hsync_settle(struct csi_state *state)
 {
 	u32 val;
-	csi_dev_dbg("enter %s\n",__func__);
-	state->hs_settle = g_hs_settle;
-	state->clk_settle = g_clk_settle;
+
 	val = mipi_csis_read(state, MIPI_CSIS_DPHYCTRL);
 	val &= ~MIPI_CSIS_DPHYCTRL_HSS_MASK;
 	val |= (state->hs_settle << 24) | (state->clk_settle << 22);
 	mipi_csis_write(state, MIPI_CSIS_DPHYCTRL, val);
-	csi_dev_dbg("hs_settle=0x%.8x,clk_settle=0x%.8x, %s=0x%.8x\n",g_hs_settle,g_clk_settle,"MIPI_CSIS_DPHYCTRL",val);
 }
 
 static void mipi_csis_set_params(struct csi_state *state)
@@ -847,10 +805,6 @@ static void mipi_csis_set_params(struct csi_state *state)
 	val |= (state->num_lanes - 1) << MIPI_CSIS_CMN_CTRL_LANE_NR_OFFSET;
 	val |= MIPI_CSIS_CMN_CTRL_HDR_MODE;
 	mipi_csis_write(state, MIPI_CSIS_CMN_CTRL, val);
-
-
-	// by mirika
-	__mipi_slave_control(state);
 
 	__mipi_csis_set_format(state);
 	mipi_csis_set_hsync_settle(state);
@@ -1618,11 +1572,6 @@ static int mipi_csis_parse_dt(struct platform_device *pdev,
 	state->wclk_ext = of_property_read_bool(node, "csis-wclk");
 
 	of_node_put(node);
-	csi_dev_dbg("csis-hs-settle %u\n", state->hs_settle);
-	csi_dev_dbg("csis-clk-settle %u\n", state->clk_settle);
-	csi_dev_dbg("data-lanes %u\n", state->num_lanes);
-	g_hs_settle = state->hs_settle;
-	g_clk_settle = state->clk_settle;
 	return 0;
 }
 

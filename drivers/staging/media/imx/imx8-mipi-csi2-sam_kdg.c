@@ -37,20 +37,25 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/videodev2.h>
-#include <linux/v4l2-mediabus.h>
-#include <linux/reset.h>
-#include <linux/version.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-device.h>
-#include <media/v4l2-event.h>
+#include <linux/reset.h>
 
-#define CSIS_DRIVER_NAME		"mxc-mipi-csi2-sam"
-#define CSIS_SUBDEV_NAME		"mxc-mipi-csi2"
-#define CSIS_MAX_ENTITIES		2
-#define CSIS0_MAX_LANES			4
-#define CSIS1_MAX_LANES			2
+#if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
+#define MODVERSIONS
+#endif
 
-#define MIPI_CSIS_OF_NODE_NAME		"csi"
+#ifdef MODVERSIONS
+#include <config/modversions.h>
+#endif
+
+#define CSIS_DRIVER_NAME "mxc-mipi-csi2-sam"
+#define CSIS_SUBDEV_NAME "mxc-mipi-csi2"
+#define CSIS_MAX_ENTITIES 2
+#define CSIS0_MAX_LANES 4
+#define CSIS1_MAX_LANES 2
+
+#define MIPI_CSIS_OF_NODE_NAME "csi"
 
 //for internel driver debug
 #define DEV_DBG_EN 1
@@ -69,232 +74,229 @@
 #define csi_dev_print(x, arg...)                                               \
 	printk(KERN_INFO "[CAM][%s][%d]" x, CSIS_DRIVER_NAME, __LINE__, ##arg)
 
+#define MIPI_CSIS_VC0_PAD_SINK 0
+#define MIPI_CSIS_VC1_PAD_SINK 1
+#define MIPI_CSIS_VC2_PAD_SINK 2
+#define MIPI_CSIS_VC3_PAD_SINK 3
 
-#define MIPI_CSIS_VC0_PAD_SINK		0
-#define MIPI_CSIS_VC1_PAD_SINK		1
-#define MIPI_CSIS_VC2_PAD_SINK		2
-#define MIPI_CSIS_VC3_PAD_SINK		3
+#define MIPI_CSIS_VC0_PAD_SOURCE 4
+#define MIPI_CSIS_VC1_PAD_SOURCE 5
+#define MIPI_CSIS_VC2_PAD_SOURCE 6
+#define MIPI_CSIS_VC3_PAD_SOURCE 7
+#define MIPI_CSIS_VCX_PADS_NUM 8
 
-#define MIPI_CSIS_VC0_PAD_SOURCE	4
-#define MIPI_CSIS_VC1_PAD_SOURCE	5
-#define MIPI_CSIS_VC2_PAD_SOURCE	6
-#define MIPI_CSIS_VC3_PAD_SOURCE	7
-#define MIPI_CSIS_VCX_PADS_NUM		8
-
-
-#define MIPI_CSIS_DEF_PIX_WIDTH		1920
-#define MIPI_CSIS_DEF_PIX_HEIGHT	1080
+#define MIPI_CSIS_DEF_PIX_WIDTH 1920
+#define MIPI_CSIS_DEF_PIX_HEIGHT 1080
 
 /* Register map definition */
 
 /* CSIS version */
-#define MIPI_CSIS_VERSION			0x00
+#define MIPI_CSIS_VERSION 0x00
 
 /* CSIS common control */
-#define MIPI_CSIS_CMN_CTRL			0x04
-#define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW	(1 << 16)
-#define MIPI_CSIS_CMN_CTRL_HDR_MODE		(1 << 11)
-#define MIPI_CSIS_CMN_CTRL_INTER_MODE		(1 << 10)
-#define MIPI_CSIS_CMN_CTRL_LANE_NR_OFFSET	8
-#define MIPI_CSIS_CMN_CTRL_LANE_NR_MASK		(3 << 8)
-#define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW_CTRL	(1 << 2)
-#define MIPI_CSIS_CMN_CTRL_RESET		(1 << 1)
-#define MIPI_CSIS_CMN_CTRL_ENABLE		(1 << 0)
+#define MIPI_CSIS_CMN_CTRL 0x04
+#define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW (1 << 16)
+#define MIPI_CSIS_CMN_CTRL_HDR_MODE (1 << 11)
+#define MIPI_CSIS_CMN_CTRL_INTER_MODE (1 << 10)
+#define MIPI_CSIS_CMN_CTRL_LANE_NR_OFFSET 8
+#define MIPI_CSIS_CMN_CTRL_LANE_NR_MASK (3 << 8)
+#define MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW_CTRL (1 << 2)
+#define MIPI_CSIS_CMN_CTRL_RESET (1 << 1)
+#define MIPI_CSIS_CMN_CTRL_ENABLE (1 << 0)
 
 /* CSIS clock control */
-#define MIPI_CSIS_CLK_CTRL			0x08
-#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH3(x)	(x << 28)
-#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH2(x)	(x << 24)
-#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH1(x)	(x << 20)
-#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH0(x)	(x << 16)
-#define MIPI_CSIS_CLK_CTRL_CLKGATE_EN_MSK	(0xf << 4)
-#define MIPI_CSIS_CLK_CTRL_WCLK_SRC		(1 << 0)
+#define MIPI_CSIS_CLK_CTRL 0x08
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH3(x) (x << 28)
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH2(x) (x << 24)
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH1(x) (x << 20)
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH0(x) (x << 16)
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_EN_MSK (0xf << 4)
+#define MIPI_CSIS_CLK_CTRL_CLKGATE_EN_ALIVE(x)  (x << 4)
+#define MIPI_CSIS_CLK_CTRL_WCLK_SRC (1 << 0)
 
 /* CSIS Interrupt mask */
-#define MIPI_CSIS_INTMSK			0x10
-#define MIPI_CSIS_INTMSK_EVEN_BEFORE		(1 << 31)
-#define MIPI_CSIS_INTMSK_EVEN_AFTER		(1 << 30)
-#define MIPI_CSIS_INTMSK_ODD_BEFORE		(1 << 29)
-#define MIPI_CSIS_INTMSK_ODD_AFTER		(1 << 28)
-#define MIPI_CSIS_INTMSK_FRAME_START		(1 << 24)
-#define MIPI_CSIS_INTMSK_FRAME_END		(1 << 20)
-#define MIPI_CSIS_INTMSK_ERR_SOT_HS		(1 << 16)
-#define MIPI_CSIS_INTMSK_ERR_LOST_FS		(1 << 12)
-#define MIPI_CSIS_INTMSK_ERR_LOST_FE		(1 << 8)
-#define MIPI_CSIS_INTMSK_ERR_OVER		(1 << 4)
-#define MIPI_CSIS_INTMSK_ERR_WRONG_CFG		(1 << 3)
-#define MIPI_CSIS_INTMSK_ERR_ECC		(1 << 2)
-#define MIPI_CSIS_INTMSK_ERR_CRC		(1 << 1)
-#define MIPI_CSIS_INTMSK_ERR_UNKNOWN		(1 << 0)
+#define MIPI_CSIS_INTMSK 0x10
+#define MIPI_CSIS_INTMSK_EVEN_BEFORE (1 << 31)
+#define MIPI_CSIS_INTMSK_EVEN_AFTER (1 << 30)
+#define MIPI_CSIS_INTMSK_ODD_BEFORE (1 << 29)
+#define MIPI_CSIS_INTMSK_ODD_AFTER (1 << 28)
+#define MIPI_CSIS_INTMSK_FRAME_START (1 << 24)
+#define MIPI_CSIS_INTMSK_FRAME_END (1 << 20)
+#define MIPI_CSIS_INTMSK_ERR_SOT_HS (1 << 16)
+#define MIPI_CSIS_INTMSK_ERR_LOST_FS (1 << 12)
+#define MIPI_CSIS_INTMSK_ERR_LOST_FE (1 << 8)
+#define MIPI_CSIS_INTMSK_ERR_OVER (1 << 4)
+#define MIPI_CSIS_INTMSK_ERR_WRONG_CFG (1 << 3)
+#define MIPI_CSIS_INTMSK_ERR_ECC (1 << 2)
+#define MIPI_CSIS_INTMSK_ERR_CRC (1 << 1)
+#define MIPI_CSIS_INTMSK_ERR_UNKNOWN (1 << 0)
 
 /* CSIS Interrupt source */
-#define MIPI_CSIS_INTSRC			0x14
-#define MIPI_CSIS_INTSRC_EVEN_BEFORE		(1 << 31)
-#define MIPI_CSIS_INTSRC_EVEN_AFTER		(1 << 30)
-#define MIPI_CSIS_INTSRC_EVEN			(0x3 << 30)
-#define MIPI_CSIS_INTSRC_ODD_BEFORE		(1 << 29)
-#define MIPI_CSIS_INTSRC_ODD_AFTER		(1 << 28)
-#define MIPI_CSIS_INTSRC_ODD			(0x3 << 28)
-#define MIPI_CSIS_INTSRC_NON_IMAGE_DATA		(0xf << 28)
-#define MIPI_CSIS_INTSRC_FRAME_START		(1 << 24)
-#define MIPI_CSIS_INTSRC_FRAME_END		(1 << 20)
-#define MIPI_CSIS_INTSRC_ERR_SOT_HS		(1 << 16)
-#define MIPI_CSIS_INTSRC_ERR_LOST_FS		(1 << 12)
-#define MIPI_CSIS_INTSRC_ERR_LOST_FE		(1 << 8)
-#define MIPI_CSIS_INTSRC_ERR_OVER		(1 << 4)
-#define MIPI_CSIS_INTSRC_ERR_WRONG_CFG		(1 << 3)
-#define MIPI_CSIS_INTSRC_ERR_ECC		(1 << 2)
-#define MIPI_CSIS_INTSRC_ERR_CRC		(1 << 1)
-#define MIPI_CSIS_INTSRC_ERR_UNKNOWN		(1 << 0)
-#define MIPI_CSIS_INTSRC_ERRORS			0xfffff
+#define MIPI_CSIS_INTSRC 0x14
+#define MIPI_CSIS_INTSRC_EVEN_BEFORE (1 << 31)
+#define MIPI_CSIS_INTSRC_EVEN_AFTER (1 << 30)
+#define MIPI_CSIS_INTSRC_EVEN (0x3 << 30)
+#define MIPI_CSIS_INTSRC_ODD_BEFORE (1 << 29)
+#define MIPI_CSIS_INTSRC_ODD_AFTER (1 << 28)
+#define MIPI_CSIS_INTSRC_ODD (0x3 << 28)
+#define MIPI_CSIS_INTSRC_NON_IMAGE_DATA (0xf << 28)
+#define MIPI_CSIS_INTSRC_FRAME_START (1 << 24)
+#define MIPI_CSIS_INTSRC_FRAME_END (1 << 20)
+#define MIPI_CSIS_INTSRC_ERR_SOT_HS (1 << 16)
+#define MIPI_CSIS_INTSRC_ERR_LOST_FS (1 << 12)
+#define MIPI_CSIS_INTSRC_ERR_LOST_FE (1 << 8)
+#define MIPI_CSIS_INTSRC_ERR_OVER (1 << 4)
+#define MIPI_CSIS_INTSRC_ERR_WRONG_CFG (1 << 3)
+#define MIPI_CSIS_INTSRC_ERR_ECC (1 << 2)
+#define MIPI_CSIS_INTSRC_ERR_CRC (1 << 1)
+#define MIPI_CSIS_INTSRC_ERR_UNKNOWN (1 << 0)
+#define MIPI_CSIS_INTSRC_ERRORS 0xfffff
 
 /* D-PHY status control */
-#define MIPI_CSIS_DPHYSTATUS			0x20
-#define MIPI_CSIS_DPHYSTATUS_ULPS_DAT		(1 << 8)
-#define MIPI_CSIS_DPHYSTATUS_STOPSTATE_DAT	(1 << 4)
-#define MIPI_CSIS_DPHYSTATUS_ULPS_CLK		(1 << 1)
-#define MIPI_CSIS_DPHYSTATUS_STOPSTATE_CLK	(1 << 0)
+#define MIPI_CSIS_DPHYSTATUS 0x20
+#define MIPI_CSIS_DPHYSTATUS_ULPS_DAT (1 << 8)
+#define MIPI_CSIS_DPHYSTATUS_STOPSTATE_DAT (1 << 4)
+#define MIPI_CSIS_DPHYSTATUS_ULPS_CLK (1 << 1)
+#define MIPI_CSIS_DPHYSTATUS_STOPSTATE_CLK (1 << 0)
 
 /* D-PHY common control */
-#define MIPI_CSIS_DPHYCTRL			0x24
-#define MIPI_CSIS_DPHYCTRL_HSS_MASK		(0xff << 24)
-#define MIPI_CSIS_DPHYCTRL_HSS_OFFSET		24
-#define MIPI_CSIS_DPHYCTRL_SCLKS_MASK		(0x3 << 22)
-#define MIPI_CSIS_DPHYCTRL_SCLKS_OFFSET		22
-#define MIPI_CSIS_DPHYCTRL_DPDN_SWAP_CLK	(1 << 6)
-#define MIPI_CSIS_DPHYCTRL_DPDN_SWAP_DAT	(1 << 5)
-#define MIPI_CSIS_DPHYCTRL_ENABLE_DAT		(1 << 1)
-#define MIPI_CSIS_DPHYCTRL_ENABLE_CLK		(1 << 0)
-#define MIPI_CSIS_DPHYCTRL_ENABLE		(0x1f << 0)
+#define MIPI_CSIS_DPHYCTRL 0x24
+#define MIPI_CSIS_DPHYCTRL_HSS_MASK (0xff << 24)
+#define MIPI_CSIS_DPHYCTRL_HSS_OFFSET 24
+#define MIPI_CSIS_DPHYCTRL_SCLKS_MASK (0x3 << 22)
+#define MIPI_CSIS_DPHYCTRL_SCLKS_OFFSET 22
+#define MIPI_CSIS_DPHYCTRL_DPDN_SWAP_CLK (1 << 6)
+#define MIPI_CSIS_DPHYCTRL_DPDN_SWAP_DAT (1 << 5)
+#define MIPI_CSIS_DPHYCTRL_ENABLE_DAT (1 << 1)
+#define MIPI_CSIS_DPHYCTRL_ENABLE_CLK (1 << 0)
+#define MIPI_CSIS_DPHYCTRL_ENABLE (0x1f << 0)
 
 /* D-PHY Master and Slave Control register Low */
-#define MIPI_CSIS_DPHYBCTRL_L		0x30
+#define MIPI_CSIS_DPHYBCTRL_L 0x30
 /* D-PHY Master and Slave Control register High */
-#define MIPI_CSIS_DPHYBCTRL_H		0x34
+#define MIPI_CSIS_DPHYBCTRL_H 0x34
 /* D-PHY Slave Control register Low */
-#define MIPI_CSIS_DPHYSCTRL_L		0x38
+#define MIPI_CSIS_DPHYSCTRL_L 0x38
 /* D-PHY Slave Control register High */
-#define MIPI_CSIS_DPHYSCTRL_H		0x3c
-
+#define MIPI_CSIS_DPHYSCTRL_H 0x3c
 
 /* ISP Configuration register */
-#define MIPI_CSIS_ISPCONFIG_CH0				0x40
-#define MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_MASK		(0x3 << 12)
-#define MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_SHIFT	12
+#define MIPI_CSIS_ISPCONFIG_CH0 0x40
+#define MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_MASK (0x3 << 12)
+#define MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_SHIFT 12
 
-#define MIPI_CSIS_ISPCONFIG_CH1				0x50
-#define MIPI_CSIS_ISPCONFIG_CH1_PIXEL_MODE_MASK		(0x3 << 12)
-#define MIPI_CSIS_ISPCONFIG_CH1_PIXEL_MODE_SHIFT	12
+#define MIPI_CSIS_ISPCONFIG_CH1 0x50
+#define MIPI_CSIS_ISPCONFIG_CH1_PIXEL_MODE_MASK (0x3 << 12)
+#define MIPI_CSIS_ISPCONFIG_CH1_PIXEL_MODE_SHIFT 12
 
-#define MIPI_CSIS_ISPCONFIG_CH2				0x60
-#define MIPI_CSIS_ISPCONFIG_CH2_PIXEL_MODE_MASK		(0x3 << 12)
-#define MIPI_CSIS_ISPCONFIG_CH2_PIXEL_MODE_SHIFT	12
+#define MIPI_CSIS_ISPCONFIG_CH2 0x60
+#define MIPI_CSIS_ISPCONFIG_CH2_PIXEL_MODE_MASK (0x3 << 12)
+#define MIPI_CSIS_ISPCONFIG_CH2_PIXEL_MODE_SHIFT 12
 
-#define MIPI_CSIS_ISPCONFIG_CH3				0x70
-#define MIPI_CSIS_ISPCONFIG_CH3_PIXEL_MODE_MASK		(0x3 << 12)
-#define MIPI_CSIS_ISPCONFIG_CH3_PIXEL_MODE_SHIFT	12
+#define MIPI_CSIS_ISPCONFIG_CH3 0x70
+#define MIPI_CSIS_ISPCONFIG_CH3_PIXEL_MODE_MASK (0x3 << 12)
+#define MIPI_CSIS_ISPCONFIG_CH3_PIXEL_MODE_SHIFT 12
 
-#define PIXEL_MODE_SINGLE_PIXEL_MODE			0x0
-#define PIXEL_MODE_DUAL_PIXEL_MODE			0x1
-#define PIXEL_MODE_QUAD_PIXEL_MODE			0x2
-#define PIXEL_MODE_INVALID_PIXEL_MODE			0x3
+#define PIXEL_MODE_SINGLE_PIXEL_MODE 0x0
+#define PIXEL_MODE_DUAL_PIXEL_MODE 0x1
+#define PIXEL_MODE_QUAD_PIXEL_MODE 0x2
+#define PIXEL_MODE_INVALID_PIXEL_MODE 0x3
 
-
-#define MIPI_CSIS_ISPCFG_MEM_FULL_GAP_MSK	(0xff << 24)
-#define MIPI_CSIS_ISPCFG_MEM_FULL_GAP(x)	(x << 24)
-#define MIPI_CSIS_ISPCFG_DOUBLE_CMPNT		(1 << 12)
-#define MIPI_CSIS_ISPCFG_ALIGN_32BIT		(1 << 11)
-#define MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT	(0x1e << 2)
-#define MIPI_CSIS_ISPCFG_FMT_RAW8		(0x2a << 2)
-#define MIPI_CSIS_ISPCFG_FMT_RAW10		(0x2b << 2)
-#define MIPI_CSIS_ISPCFG_FMT_RAW12		(0x2c << 2)
-#define MIPI_CSIS_ISPCFG_FMT_RGB888		(0x24 << 2)
-#define MIPI_CSIS_ISPCFG_FMT_RGB565		(0x22 << 2)
+#define MIPI_CSIS_ISPCFG_MEM_FULL_GAP_MSK (0xff << 24)
+#define MIPI_CSIS_ISPCFG_MEM_FULL_GAP(x) (x << 24)
+#define MIPI_CSIS_ISPCFG_DOUBLE_CMPNT (1 << 12)
+#define MIPI_CSIS_ISPCFG_ALIGN_32BIT (1 << 11)
+#define MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT (0x1e << 2)
+#define MIPI_CSIS_ISPCFG_FMT_RAW8 (0x2a << 2)
+#define MIPI_CSIS_ISPCFG_FMT_RAW10 (0x2b << 2)
+#define MIPI_CSIS_ISPCFG_FMT_RAW12 (0x2c << 2)
+#define MIPI_CSIS_ISPCFG_FMT_RGB888 (0x24 << 2)
+#define MIPI_CSIS_ISPCFG_FMT_RGB565 (0x22 << 2)
 /* User defined formats, x = 1...4 */
-#define MIPI_CSIS_ISPCFG_FMT_USER(x)		((0x30 + x - 1) << 2)
-#define MIPI_CSIS_ISPCFG_FMT_MASK		(0x3f << 2)
+#define MIPI_CSIS_ISPCFG_FMT_USER(x) ((0x30 + x - 1) << 2)
+#define MIPI_CSIS_ISPCFG_FMT_MASK (0x3f << 2)
 
 /* ISP Image Resolution register */
-#define MIPI_CSIS_ISPRESOL_CH0			0x44
-#define MIPI_CSIS_ISPRESOL_CH1			0x54
-#define MIPI_CSIS_ISPRESOL_CH2			0x64
-#define MIPI_CSIS_ISPRESOL_CH3			0x74
-#define CSIS_MAX_PIX_WIDTH			0xffff
-#define CSIS_MAX_PIX_HEIGHT			0xffff
+#define MIPI_CSIS_ISPRESOL_CH0 0x44
+#define MIPI_CSIS_ISPRESOL_CH1 0x54
+#define MIPI_CSIS_ISPRESOL_CH2 0x64
+#define MIPI_CSIS_ISPRESOL_CH3 0x74
+#define CSIS_MAX_PIX_WIDTH 0xffff
+#define CSIS_MAX_PIX_HEIGHT 0xffff
 
 /* ISP SYNC register */
-#define MIPI_CSIS_ISPSYNC_CH0			0x48
-#define MIPI_CSIS_ISPSYNC_CH1			0x58
-#define MIPI_CSIS_ISPSYNC_CH2			0x68
-#define MIPI_CSIS_ISPSYNC_CH3			0x78
+#define MIPI_CSIS_ISPSYNC_CH0 0x48
+#define MIPI_CSIS_ISPSYNC_CH1 0x58
+#define MIPI_CSIS_ISPSYNC_CH2 0x68
+#define MIPI_CSIS_ISPSYNC_CH3 0x78
 
-#define MIPI_CSIS_ISPSYNC_HSYNC_LINTV_OFFSET	18
-#define MIPI_CSIS_ISPSYNC_VSYNC_SINTV_OFFSET 	12
-#define MIPI_CSIS_ISPSYNC_VSYNC_EINTV_OFFSET	0
+#define MIPI_CSIS_ISPSYNC_HSYNC_LINTV_OFFSET 18
+#define MIPI_CSIS_ISPSYNC_VSYNC_SINTV_OFFSET 12
+#define MIPI_CSIS_ISPSYNC_VSYNC_EINTV_OFFSET 0
 
-#define MIPI_CSIS_FRAME_COUNTER_CH0	0x0100
-#define MIPI_CSIS_FRAME_COUNTER_CH1	0x0104
-#define MIPI_CSIS_FRAME_COUNTER_CH2	0x0108
-#define MIPI_CSIS_FRAME_COUNTER_CH3	0x010C
+#define MIPI_CSIS_FRAME_COUNTER_CH0 0x0100
+#define MIPI_CSIS_FRAME_COUNTER_CH1 0x0104
+#define MIPI_CSIS_FRAME_COUNTER_CH2 0x0108
+#define MIPI_CSIS_FRAME_COUNTER_CH3 0x010C
 
 /* Non-image packet data buffers */
-#define MIPI_CSIS_PKTDATA_ODD		0x2000
-#define MIPI_CSIS_PKTDATA_EVEN		0x3000
-#define MIPI_CSIS_PKTDATA_SIZE		SZ_4K
+#define MIPI_CSIS_PKTDATA_ODD 0x2000
+#define MIPI_CSIS_PKTDATA_EVEN 0x3000
+#define MIPI_CSIS_PKTDATA_SIZE SZ_4K
 
-#define DEFAULT_SCLK_CSIS_FREQ		166000000UL
+#define DEFAULT_SCLK_CSIS_FREQ 166000000UL
 
 /* display_mix_clk_en_csr */
-#define DISP_MIX_GASKET_0_CTRL			0x00
-#define GASKET_0_CTRL_DATA_TYPE(x)		(((x) & (0x3F)) << 8)
-#define GASKET_0_CTRL_DATA_TYPE_MASK		((0x3FUL) << (8))
+#define DISP_MIX_GASKET_0_CTRL 0x00
+#define GASKET_0_CTRL_DATA_TYPE(x) (((x) & (0x3F)) << 8)
+#define GASKET_0_CTRL_DATA_TYPE_MASK ((0x3FUL) << (8))
 
-#define GASKET_0_CTRL_DATA_TYPE_YUV420_8	0x18
-#define GASKET_0_CTRL_DATA_TYPE_YUV420_10	0x19
-#define GASKET_0_CTRL_DATA_TYPE_LE_YUV420_8	0x1a
-#define GASKET_0_CTRL_DATA_TYPE_CS_YUV420_8	0x1c
-#define GASKET_0_CTRL_DATA_TYPE_CS_YUV420_10	0x1d
-#define GASKET_0_CTRL_DATA_TYPE_YUV422_8	0x1e
-#define GASKET_0_CTRL_DATA_TYPE_YUV422_10	0x1f
-#define GASKET_0_CTRL_DATA_TYPE_RGB565		0x22
-#define GASKET_0_CTRL_DATA_TYPE_RGB666		0x23
-#define GASKET_0_CTRL_DATA_TYPE_RGB888		0x24
-#define GASKET_0_CTRL_DATA_TYPE_RAW6		0x28
-#define GASKET_0_CTRL_DATA_TYPE_RAW7		0x29
-#define GASKET_0_CTRL_DATA_TYPE_RAW8		0x2a
-#define GASKET_0_CTRL_DATA_TYPE_RAW10		0x2b
-#define GASKET_0_CTRL_DATA_TYPE_RAW12		0x2c
-#define GASKET_0_CTRL_DATA_TYPE_RAW14		0x2d
+#define GASKET_0_CTRL_DATA_TYPE_YUV420_8 0x18
+#define GASKET_0_CTRL_DATA_TYPE_YUV420_10 0x19
+#define GASKET_0_CTRL_DATA_TYPE_LE_YUV420_8 0x1a
+#define GASKET_0_CTRL_DATA_TYPE_CS_YUV420_8 0x1c
+#define GASKET_0_CTRL_DATA_TYPE_CS_YUV420_10 0x1d
+#define GASKET_0_CTRL_DATA_TYPE_YUV422_8 0x1e
+#define GASKET_0_CTRL_DATA_TYPE_YUV422_10 0x1f
+#define GASKET_0_CTRL_DATA_TYPE_RGB565 0x22
+#define GASKET_0_CTRL_DATA_TYPE_RGB666 0x23
+#define GASKET_0_CTRL_DATA_TYPE_RGB888 0x24
+#define GASKET_0_CTRL_DATA_TYPE_RAW6 0x28
+#define GASKET_0_CTRL_DATA_TYPE_RAW7 0x29
+#define GASKET_0_CTRL_DATA_TYPE_RAW8 0x2a
+#define GASKET_0_CTRL_DATA_TYPE_RAW10 0x2b
+#define GASKET_0_CTRL_DATA_TYPE_RAW12 0x2c
+#define GASKET_0_CTRL_DATA_TYPE_RAW14 0x2d
 
-#define GASKET_0_CTRL_DUAL_COMP_ENABLE		BIT(1)
-#define GASKET_0_CTRL_ENABLE			BIT(0)
+#define GASKET_0_CTRL_DUAL_COMP_ENABLE BIT(1)
+#define GASKET_0_CTRL_ENABLE BIT(0)
 
-#define DISP_MIX_GASKET_0_HSIZE			0x04
-#define DISP_MIX_GASKET_0_VSIZE			0x08
+#define DISP_MIX_GASKET_0_HSIZE 0x04
+#define DISP_MIX_GASKET_0_VSIZE 0x08
 
-#define ISP_DEWARP_CTRL				0x138
-#define ISP_DEWARP_CTRL_ISP_0_DISABLE		BIT(0)
-#define ISP_DEWARP_CTRL_ISP_1_DISABLE		BIT(1)
-#define ISP_DEWARP_CTRL_ISP_0_DATA_TYPE(x)	(((x) & (0x3F)) << 3)
-#define ISP_DEWARP_CTRL_ISP_0_LEFT_JUST_MODE	BIT(9)
-#define ISP_DEWARP_CTRL_ISP_1_DATA_TYPE(x)	(((x) & (0x3F)) << 13)
-#define ISP_DEWARP_CTRL_ISP_1_LEFT_JUST_MODE	BIT(19)
-#define ISP_DEWARP_CTRL_ID_MODE(x)		(((x) & (0x3)) << 23)
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW6		0x28
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW7		0x29
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW8		0x2a
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW10		0x2b
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW12		0x2c
-#define ISP_DEWARP_CTRL_DATA_TYPE_RAW14		0x2d
-#define ISP_DEWARP_CTRL_ID_MODE_DISABLE		0x0
-#define ISP_DEWARP_CTRL_ID_MODE_012		0x1
-#define ISP_DEWARP_CTRL_ID_MODE_01		0x2
-#define ISP_DEWARP_CTRL_ID_MODE_02		0x3
+#define ISP_DEWARP_CTRL 0x138
+#define ISP_DEWARP_CTRL_ISP_0_DISABLE BIT(0)
+#define ISP_DEWARP_CTRL_ISP_1_DISABLE BIT(1)
+#define ISP_DEWARP_CTRL_ISP_0_DATA_TYPE(x) (((x) & (0x3F)) << 3)
+#define ISP_DEWARP_CTRL_ISP_0_LEFT_JUST_MODE BIT(9)
+#define ISP_DEWARP_CTRL_ISP_1_DATA_TYPE(x) (((x) & (0x3F)) << 13)
+#define ISP_DEWARP_CTRL_ISP_1_LEFT_JUST_MODE BIT(19)
+#define ISP_DEWARP_CTRL_ID_MODE(x) (((x) & (0x3)) << 23)
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW6 0x28
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW7 0x29
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW8 0x2a
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW10 0x2b
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW12 0x2c
+#define ISP_DEWARP_CTRL_DATA_TYPE_RAW14 0x2d
+#define ISP_DEWARP_CTRL_ID_MODE_DISABLE 0x0
+#define ISP_DEWARP_CTRL_ID_MODE_012 0x1
+#define ISP_DEWARP_CTRL_ID_MODE_01 0x2
+#define ISP_DEWARP_CTRL_ID_MODE_02 0x3
 
 struct csi_state;
 struct mipi_csis_event {
 	u32 mask;
-	const char * const name;
+	const char *const name;
 	unsigned int counter;
 };
 
@@ -365,21 +367,21 @@ struct mipi_csis_pdata {
 
 static const struct mipi_csis_event mipi_csis_events[] = {
 	/* Errors */
-	{ MIPI_CSIS_INTSRC_ERR_SOT_HS,	"SOT Error" },
-	{ MIPI_CSIS_INTSRC_ERR_LOST_FS,	"Lost Frame Start Error" },
-	{ MIPI_CSIS_INTSRC_ERR_LOST_FE,	"Lost Frame End Error" },
-	{ MIPI_CSIS_INTSRC_ERR_OVER,	"FIFO Overflow Error" },
-	{ MIPI_CSIS_INTSRC_ERR_ECC,	"ECC Error" },
-	{ MIPI_CSIS_INTSRC_ERR_CRC,	"CRC Error" },
-	{ MIPI_CSIS_INTSRC_ERR_UNKNOWN,	"Unknown Error" },
+	{ MIPI_CSIS_INTSRC_ERR_SOT_HS, "SOT Error" },
+	{ MIPI_CSIS_INTSRC_ERR_LOST_FS, "Lost Frame Start Error" },
+	{ MIPI_CSIS_INTSRC_ERR_LOST_FE, "Lost Frame End Error" },
+	{ MIPI_CSIS_INTSRC_ERR_OVER, "FIFO Overflow Error" },
+	{ MIPI_CSIS_INTSRC_ERR_ECC, "ECC Error" },
+	{ MIPI_CSIS_INTSRC_ERR_CRC, "CRC Error" },
+	{ MIPI_CSIS_INTSRC_ERR_UNKNOWN, "Unknown Error" },
 	/* Non-image data receive events */
-	{ MIPI_CSIS_INTSRC_EVEN_BEFORE,	"Non-image data before even frame" },
-	{ MIPI_CSIS_INTSRC_EVEN_AFTER,	"Non-image data after even frame" },
-	{ MIPI_CSIS_INTSRC_ODD_BEFORE,	"Non-image data before odd frame" },
-	{ MIPI_CSIS_INTSRC_ODD_AFTER,	"Non-image data after odd frame" },
+	{ MIPI_CSIS_INTSRC_EVEN_BEFORE, "Non-image data before even frame" },
+	{ MIPI_CSIS_INTSRC_EVEN_AFTER, "Non-image data after even frame" },
+	{ MIPI_CSIS_INTSRC_ODD_BEFORE, "Non-image data before odd frame" },
+	{ MIPI_CSIS_INTSRC_ODD_AFTER, "Non-image data after odd frame" },
 	/* Frame start/end */
-	{ MIPI_CSIS_INTSRC_FRAME_START,	"Frame Start" },
-	{ MIPI_CSIS_INTSRC_FRAME_END,	"Frame End" },
+	{ MIPI_CSIS_INTSRC_FRAME_START, "Frame Start" },
+	{ MIPI_CSIS_INTSRC_FRAME_END, "Frame End" },
 };
 #define MIPI_CSIS_NUM_EVENTS ARRAY_SIZE(mipi_csis_events)
 
@@ -409,10 +411,10 @@ static const struct mipi_csis_event mipi_csis_events[] = {
  * @events: MIPI-CSIS event (error) counters
  */
 struct csi_state {
-	struct v4l2_subdev	sd;
+	struct v4l2_subdev sd;
 	struct mutex lock;
-	struct device		*dev;
-	struct v4l2_device	v4l2_dev;
+	struct device *dev;
+	struct v4l2_device v4l2_dev;
 
 	struct media_pad pads[MIPI_CSIS_VCX_PADS_NUM];
 
@@ -435,7 +437,11 @@ struct csi_state {
 	u32 max_num_lanes;
 	u8 wclk_ext;
 
-	//by mirika 
+	// by mirika
+	u8 clk_unalive;
+	u8 clk_settle_ctl;
+	u8 clk_channel_swap;
+	u8 data_channel_swap;
 	u32 mipi_dphy_slave_control_h;
 	u32 mipi_dphy_slave_control_l;
 
@@ -447,12 +453,12 @@ struct csi_state {
 	struct csis_pktbuf pkt_buf;
 	struct mipi_csis_event events[MIPI_CSIS_NUM_EVENTS];
 
-	struct v4l2_async_subdev    asd;
-	struct v4l2_async_notifier  subdev_notifier;
-	struct v4l2_async_subdev    *async_subdevs[2];
+	struct v4l2_async_subdev asd;
+	struct v4l2_async_notifier subdev_notifier;
+	struct v4l2_async_subdev *async_subdevs[2];
 
 	struct csis_hw_reset1 hw_reset;
-	struct regulator     *mipi_phy_regulator;
+	struct regulator *mipi_phy_regulator;
 
 	struct regmap *gasket;
 	struct regmap *mix_gpr;
@@ -465,12 +471,8 @@ struct csi_state {
 
 	struct mipi_csis_pdata const *pdata;
 	bool hdr;
-	u32 val;
 };
 
-/*
-* by MIRIKA 
-*/
 static int debug;
 static unsigned int g_dphy_slave_control_high=0x00;
 static unsigned int g_dphy_slave_control_low=0x00;
@@ -503,67 +505,63 @@ static const struct csis_pix_format mipi_csis_formats[] = {
 		.code = MEDIA_BUS_FMT_YUYV8_2X8,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_RGB888_1X24,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RGB888,
 		.data_alignment = 24,
-	}, {
-		.code = MEDIA_BUS_FMT_UYVY8_1X16,
-		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT,
-		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_UYVY8_2X8,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_VYUY8_2X8,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SBGGR8_1X8,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW8,
 		.data_alignment = 8,
-	}, {
-		.code = MEDIA_BUS_FMT_SGBRG8_1X8,
-		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW8,
-		.data_alignment = 8,
-	}, {
-		.code = MEDIA_BUS_FMT_SGRBG8_1X8,
-		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW8,
-		.data_alignment = 8,
-	}, {
-		.code = MEDIA_BUS_FMT_SRGGB8_1X8,
-		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW8,
-		.data_alignment = 8,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SBGGR10_1X10,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW10,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SGBRG10_1X10,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW10,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SGRBG10_1X10,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW10,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SRGGB10_1X10,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW10,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SBGGR12_1X12,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW12,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW12,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW12,
 		.data_alignment = 16,
-	}, {
+	},
+	{
 		.code = MEDIA_BUS_FMT_SRGGB12_1X12,
 		.fmt_reg = MIPI_CSIS_ISPCFG_FMT_RAW12,
 		.data_alignment = 16,
@@ -577,39 +575,30 @@ static void dump_csis_regs(struct csi_state *state, const char *label)
 {
 	struct {
 		u32 offset;
-		const char * const name;
+		const char *const name;
 	} registers[] = {
-		{ 0x00, "CSIS_VERSION" },
-		{ 0x04, "CSIS_CMN_CTRL" },
-		{ 0x08, "CSIS_CLK_CTRL" },
-		{ 0x10, "CSIS_INTMSK" },
-		{ 0x14, "CSIS_INTSRC" },
-		{ 0x20, "CSIS_DPHYSTATUS" },
-		{ 0x24, "CSIS_DPHYCTRL" },
-		{ 0x30, "CSIS_DPHYBCTRL_L" },
-		{ 0x34, "CSIS_DPHYBCTRL_H" },
-		{ 0x38, "CSIS_DPHYSCTRL_L" },
-		{ 0x3C, "CSIS_DPHYSCTRL_H" },
-		{ 0x40, "CSIS_ISPCONFIG_CH0" },
-		{ 0x50, "CSIS_ISPCONFIG_CH1" },
-		{ 0x60, "CSIS_ISPCONFIG_CH2" },
-		{ 0x70, "CSIS_ISPCONFIG_CH3" },
-		{ 0x44, "CSIS_ISPRESOL_CH0" },
-		{ 0x54, "CSIS_ISPRESOL_CH1" },
-		{ 0x64, "CSIS_ISPRESOL_CH2" },
-		{ 0x74, "CSIS_ISPRESOL_CH3" },
-		{ 0x48, "CSIS_ISPSYNC_CH0" },
-		{ 0x58, "CSIS_ISPSYNC_CH1" },
-		{ 0x68, "CSIS_ISPSYNC_CH2" },
+		{ 0x00, "CSIS_VERSION" },	{ 0x04, "CSIS_CMN_CTRL" },
+		{ 0x08, "CSIS_CLK_CTRL" },	{ 0x10, "CSIS_INTMSK" },
+		{ 0x14, "CSIS_INTSRC" },	{ 0x20, "CSIS_DPHYSTATUS" },
+		{ 0x24, "CSIS_DPHYCTRL" },	{ 0x30, "CSIS_DPHYBCTRL_L" },
+		{ 0x34, "CSIS_DPHYBCTRL_H" },	{ 0x38, "CSIS_DPHYSCTRL_L" },
+		{ 0x3C, "CSIS_DPHYSCTRL_H" },	{ 0x40, "CSIS_ISPCONFIG_CH0" },
+		{ 0x50, "CSIS_ISPCONFIG_CH1" }, { 0x60, "CSIS_ISPCONFIG_CH2" },
+		{ 0x70, "CSIS_ISPCONFIG_CH3" }, { 0x44, "CSIS_ISPRESOL_CH0" },
+		{ 0x54, "CSIS_ISPRESOL_CH1" },	{ 0x64, "CSIS_ISPRESOL_CH2" },
+		{ 0x74, "CSIS_ISPRESOL_CH3" },	{ 0x48, "CSIS_ISPSYNC_CH0" },
+		{ 0x58, "CSIS_ISPSYNC_CH1" },	{ 0x68, "CSIS_ISPSYNC_CH2" },
 		{ 0x78, "CSIS_ISPSYNC_CH3" },
 	};
 	u32 i;
-
 	v4l2_dbg(2, debug, &state->sd, "--- %s ---\n", label);
+
 
 	for (i = 0; i < ARRAY_SIZE(registers); i++) {
 		u32 cfg = mipi_csis_read(state, registers[i].offset);
-		v4l2_dbg(2, debug, &state->sd, "%20s[%x]: 0x%.8x\n", registers[i].name, registers[i].offset, cfg);
+		v4l2_dbg(2, debug, &state->sd, "%20s[%x]: 0x%.8x\n",
+			 registers[i].name, registers[i].offset, cfg);
+
 	}
 }
 
@@ -617,19 +606,20 @@ static void dump_gasket_regs(struct csi_state *state, const char *label)
 {
 	struct {
 		u32 offset;
-		const char * const name;
+		const char *const name;
 	} registers[] = {
 		{ 0x60, "GPR_GASKET_0_CTRL" },
 		{ 0x64, "GPR_GASKET_0_HSIZE" },
 		{ 0x68, "GPR_GASKET_0_VSIZE" },
 	};
 	u32 i, cfg;
-
 	v4l2_dbg(2, debug, &state->sd, "--- %s ---\n", label);
+	
 
 	for (i = 0; i < ARRAY_SIZE(registers); i++) {
 		regmap_read(state->gasket, registers[i].offset, &cfg);
-		v4l2_dbg(2, debug, &state->sd, "%20s[%x]: 0x%.8x\n", registers[i].name, registers[i].offset, cfg);
+		v4l2_dbg(2, debug, &state->sd, "%20s[%x]: 0x%.8x\n",
+			 registers[i].name, registers[i].offset, cfg);
 	}
 }
 
@@ -638,7 +628,8 @@ static inline struct csi_state *mipi_sd_to_csi_state(struct v4l2_subdev *sdev)
 	return container_of(sdev, struct csi_state, sd);
 }
 
-static inline struct csi_state *notifier_to_mipi_dev(struct v4l2_async_notifier *n)
+static inline struct csi_state *
+notifier_to_mipi_dev(struct v4l2_async_notifier *n)
 {
 	return container_of(n, struct csi_state, subdev_notifier);
 }
@@ -648,34 +639,36 @@ static struct media_pad *csis_get_remote_sensor_pad(struct csi_state *state)
 	struct v4l2_subdev *subdev = &state->sd;
 	struct media_pad *sink_pad, *source_pad;
 	int i;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	while (1) {
 		source_pad = NULL;
 		for (i = 0; i < subdev->entity.num_pads; i++) {
 			sink_pad = &subdev->entity.pads[i];
 
 			if (sink_pad->flags & MEDIA_PAD_FL_SINK) {
-				source_pad = media_pad_remote_pad_first(sink_pad);
+				source_pad = media_entity_remote_pad(sink_pad);
 				if (source_pad)
 					break;
 			}
 		}
 		/* return first pad point in the loop  */
+		csi_dev_dbg(" exit %s, find source_pad=%s\n",__func__,source_pad->entity->name);
 		return source_pad;
 	}
 
 	if (i == subdev->entity.num_pads)
 		v4l2_err(&state->sd, "%s, No remote pad found!\n", __func__);
 
+	csi_dev_dbg(" exit %s\n",__func__);
 	return NULL;
 }
 
 static struct v4l2_subdev *csis_get_remote_subdev(struct csi_state *state,
-						  const char * const label)
+						  const char *const label)
 {
 	struct media_pad *source_pad;
 	struct v4l2_subdev *sen_sd;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad */
 	source_pad = csis_get_remote_sensor_pad(state);
 	if (!source_pad) {
@@ -689,14 +682,14 @@ static struct v4l2_subdev *csis_get_remote_subdev(struct csi_state *state,
 		v4l2_err(&state->sd, "%s, No remote subdev found!\n", label);
 		return NULL;
 	}
-
+	csi_dev_dbg("exit %s\n",__func__);
 	return sen_sd;
 }
 
 static const struct csis_pix_format *find_csis_format(u32 code)
 {
 	int i;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	for (i = 0; i < ARRAY_SIZE(mipi_csis_formats); i++)
 		if (code == mipi_csis_formats[i].code)
 			return &mipi_csis_formats[i];
@@ -706,7 +699,7 @@ static const struct csis_pix_format *find_csis_format(u32 code)
 static void mipi_csis_clean_irq(struct csi_state *state)
 {
 	u32 status;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	status = mipi_csis_read(state, MIPI_CSIS_INTSRC);
 	mipi_csis_write(state, MIPI_CSIS_INTSRC, status);
 
@@ -717,7 +710,7 @@ static void mipi_csis_clean_irq(struct csi_state *state)
 static void mipi_csis_enable_interrupts(struct csi_state *state, bool on)
 {
 	u32 val;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	mipi_csis_clean_irq(state);
 
 	val = mipi_csis_read(state, MIPI_CSIS_INTMSK);
@@ -725,13 +718,14 @@ static void mipi_csis_enable_interrupts(struct csi_state *state, bool on)
 		val |= 0x0FFFFF1F;
 	else
 		val &= ~0x0FFFFF1F;
+	csi_dev_dbg("[%s] MIPI_CSIS_INTMSK(0x%x)=0x%.8x\n",__func__,MIPI_CSIS_INTMSK,val);
 	mipi_csis_write(state, MIPI_CSIS_INTMSK, val);
 }
 
 static void mipi_csis_sw_reset(struct csi_state *state)
 {
 	u32 val;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	val = mipi_csis_read(state, MIPI_CSIS_CMN_CTRL);
 	val |= MIPI_CSIS_CMN_CTRL_RESET;
 	mipi_csis_write(state, MIPI_CSIS_CMN_CTRL, val);
@@ -742,6 +736,7 @@ static void mipi_csis_sw_reset(struct csi_state *state)
 static int mipi_csis_phy_init(struct csi_state *state)
 {
 	state->mipi_phy_regulator = devm_regulator_get(state->dev, "mipi-phy");
+	csi_dev_dbg("enter %s\n",__func__);
 	if (IS_ERR(state->mipi_phy_regulator)) {
 		dev_err(state->dev, "Fail to get mipi-phy regulator\n");
 		return PTR_ERR(state->mipi_phy_regulator);
@@ -754,7 +749,7 @@ static int mipi_csis_phy_init(struct csi_state *state)
 static void mipi_csis_system_enable(struct csi_state *state, int on)
 {
 	u32 val, mask;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	val = mipi_csis_read(state, MIPI_CSIS_CMN_CTRL);
 	if (on)
 		val |= MIPI_CSIS_CMN_CTRL_ENABLE;
@@ -768,6 +763,7 @@ static void mipi_csis_system_enable(struct csi_state *state, int on)
 		mask = (1 << (state->num_lanes + 1)) - 1;
 		val |= (mask & MIPI_CSIS_DPHYCTRL_ENABLE);
 	}
+	csi_dev_dbg("[%s] MIPI_CSIS_DPHYCTRL(0x%x)=0x%.8x\n",__func__,MIPI_CSIS_DPHYCTRL,val);
 	mipi_csis_write(state, MIPI_CSIS_DPHYCTRL, val);
 }
 
@@ -776,9 +772,9 @@ static void __mipi_csis_set_format(struct csi_state *state)
 {
 	struct v4l2_mbus_framefmt *mf = &state->format;
 	u32 val;
-
-	v4l2_dbg(1, debug, &state->sd, "fmt: %#x, %d x %d\n",
-		 mf->code, mf->width, mf->height);
+	csi_dev_dbg("enter %s\n",__func__);
+	v4l2_dbg(1, debug, &state->sd, "fmt: %#x, %d x %d\n", mf->code,
+		 mf->width, mf->height);
 
 	/* Color format */
 	val = mipi_csis_read(state, MIPI_CSIS_ISPCONFIG_CH0);
@@ -789,8 +785,8 @@ static void __mipi_csis_set_format(struct csi_state *state)
 	val = mipi_csis_read(state, MIPI_CSIS_ISPCONFIG_CH0);
 	val &= ~MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_MASK;
 	if (state->csis_fmt->fmt_reg == MIPI_CSIS_ISPCFG_FMT_YCBCR422_8BIT)
-		val |= (PIXEL_MODE_DUAL_PIXEL_MODE <<
-			MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_SHIFT);
+		val |= (PIXEL_MODE_DUAL_PIXEL_MODE
+			<< MIPI_CSIS_ISPCONFIG_CH0_PIXEL_MODE_SHIFT);
 	mipi_csis_write(state, MIPI_CSIS_ISPCONFIG_CH0, val);
 
 	/* Pixel resolution */
@@ -831,23 +827,25 @@ static void mipi_csis_set_hsync_settle(struct csi_state *state)
 	csi_dev_dbg("enter %s\n",__func__);
 	state->hs_settle = g_hs_settle;
 	state->clk_settle = g_clk_settle;
+	state->data_channel_swap = g_data_swap;
+	state->clk_channel_swap = g_clk_swap;
 	val = mipi_csis_read(state, MIPI_CSIS_DPHYCTRL);
 	val &= ~MIPI_CSIS_DPHYCTRL_HSS_MASK;
-	val |= (state->hs_settle << 24) | (state->clk_settle << 22);
+	val |= ((state->hs_settle& 0xFF) << 24) | ((state->clk_settle & 0x3 ) << 22) | ((state->clk_channel_swap & 0x1) << 6) | ((state->data_channel_swap & 0x1) << 5 );
+	csi_dev_dbg("[%s] hs_settle=%d, clk_settle=%d, swap(%d,%d) \n",__func__,state->hs_settle,state->clk_settle,state->clk_channel_swap, state->data_channel_swap);
 	mipi_csis_write(state, MIPI_CSIS_DPHYCTRL, val);
-	csi_dev_dbg("hs_settle=0x%.8x,clk_settle=0x%.8x, %s=0x%.8x\n",g_hs_settle,g_clk_settle,"MIPI_CSIS_DPHYCTRL",val);
 }
+
 
 static void mipi_csis_set_params(struct csi_state *state)
 {
 	u32 val;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	val = mipi_csis_read(state, MIPI_CSIS_CMN_CTRL);
 	val &= ~MIPI_CSIS_CMN_CTRL_LANE_NR_MASK;
 	val |= (state->num_lanes - 1) << MIPI_CSIS_CMN_CTRL_LANE_NR_OFFSET;
 	val |= MIPI_CSIS_CMN_CTRL_HDR_MODE;
 	mipi_csis_write(state, MIPI_CSIS_CMN_CTRL, val);
-
 
 	// by mirika
 	__mipi_slave_control(state);
@@ -873,6 +871,11 @@ static void mipi_csis_set_params(struct csi_state *state)
 		val |= MIPI_CSIS_CLK_CTRL_WCLK_SRC;
 	val |= MIPI_CSIS_CLK_CTRL_CLKGATE_TRAIL_CH0(15);
 	val &= ~MIPI_CSIS_CLK_CTRL_CLKGATE_EN_MSK;
+	// by mirika 
+	state->clk_unalive = g_clk_unalive;
+	val |= MIPI_CSIS_CLK_CTRL_CLKGATE_EN_ALIVE((state->clk_unalive & 0x01));
+	csi_dev_dbg("[%s] MIPI_CSIS_CLK_CTRL val=0x%x\n",__func__,val);
+
 	mipi_csis_write(state, MIPI_CSIS_CLK_CTRL, val);
 
 	mipi_csis_write(state, MIPI_CSIS_DPHYBCTRL_L, 0x1f4);
@@ -893,7 +896,7 @@ static int mipi_csis_clk_enable(struct csi_state *state)
 {
 	struct device *dev = state->dev;
 	int ret;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	ret = clk_prepare_enable(state->mipi_clk);
 	if (ret) {
 		dev_err(dev, "enable mipi_clk failed!\n");
@@ -911,22 +914,25 @@ static int mipi_csis_clk_enable(struct csi_state *state)
 		dev_err(dev, "enable disp_apb clk failed!\n");
 		return ret;
 	}
+	csi_dev_dbg("exit %s\n",__func__);
 
 	return 0;
 }
 
 static void mipi_csis_clk_disable(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	clk_disable_unprepare(state->mipi_clk);
 	clk_disable_unprepare(state->disp_axi);
 	clk_disable_unprepare(state->disp_apb);
+	csi_dev_dbg("exit %s\n",__func__);
 }
 
 static int mipi_csis_clk_get(struct csi_state *state)
 {
 	struct device *dev = &state->pdev->dev;
 	int ret = true;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	state->mipi_clk = devm_clk_get(dev, "mipi_clk");
 	if (IS_ERR(state->mipi_clk)) {
 		dev_err(dev, "Could not get mipi csi clock\n");
@@ -949,20 +955,21 @@ static int mipi_csis_clk_get(struct csi_state *state)
 	if (state->clk_frequency) {
 		ret = clk_set_rate(state->mipi_clk, state->clk_frequency);
 		if (ret < 0) {
-			dev_err(dev, "set rate filed, rate=%d\n", state->clk_frequency);
+			dev_err(dev, "set rate filed, rate=%d\n",
+				state->clk_frequency);
 			return -EINVAL;
 		}
 	} else {
 		dev_WARN(dev, "No clock frequency specified!\n");
 	}
-
+	csi_dev_dbg("exit %s\n",__func__);
 	return 0;
 }
 
 static int disp_mix_sft_parse_resets(struct csi_state *state)
 {
 	struct mipi_csis_pdata const *pdata = state->pdata;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!pdata->rst_ops || !pdata->rst_ops->parse)
 		return -EINVAL;
 
@@ -973,21 +980,22 @@ static int disp_mix_sft_rstn(struct csi_state *state, bool enable)
 {
 	struct mipi_csis_pdata const *pdata = state->pdata;
 	int ret;
-
-	if (!pdata->rst_ops ||
-	    !pdata->rst_ops->assert ||
+	csi_dev_dbg("enter %s\n",__func__);
+	if (!pdata->rst_ops || !pdata->rst_ops->assert ||
 	    !pdata->rst_ops->deassert)
 		return -EINVAL;
 
 	ret = enable ? pdata->rst_ops->assert(state) :
 		       pdata->rst_ops->deassert(state);
+
+	csi_dev_dbg("exit %s with ret:%d\n",__func__,ret);
 	return ret;
 }
 
 static int disp_mix_clks_get(struct csi_state *state)
 {
 	struct mipi_csis_pdata const *pdata = state->pdata;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!pdata->gclk_ops || !pdata->gclk_ops->gclk_get)
 		return -EINVAL;
 
@@ -998,9 +1006,8 @@ static int disp_mix_clks_enable(struct csi_state *state, bool enable)
 {
 	struct mipi_csis_pdata const *pdata = state->pdata;
 	int ret;
-
-	if (!pdata->gclk_ops ||
-	    !pdata->gclk_ops->gclk_enable ||
+	csi_dev_dbg("enter %s\n",__func__);
+	if (!pdata->gclk_ops || !pdata->gclk_ops->gclk_enable ||
 	    !pdata->gclk_ops->gclk_disable)
 		return -EINVAL;
 
@@ -1012,7 +1019,7 @@ static int disp_mix_clks_enable(struct csi_state *state, bool enable)
 static void mipi_csis_phy_reset(struct csi_state *state)
 {
 	struct mipi_csis_pdata const *pdata = state->pdata;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!pdata->phy_ops || !pdata->phy_ops->phy_reset)
 		return;
 
@@ -1026,6 +1033,10 @@ static void disp_mix_gasket_config(struct csi_state *state)
 	struct v4l2_mbus_framefmt *mf = &state->format;
 	s32 fmt_val = -EINVAL;
 	u32 val;
+	u32 read_val,read_val1,read_val2;
+	csi_dev_dbg("enter %s\n",__func__);
+	v4l2_dbg(1, debug, &state->sd, "[%s] fmt: %#x \n", __func__,fmt->code );
+	v4l2_dbg(1, debug, &state->sd, "[%s] mf->fmt: %#x %d * %d \n", __func__,mf->code, mf->width, mf->height );
 
 	switch (fmt->code) {
 	case MEDIA_BUS_FMT_RGB888_1X24:
@@ -1034,23 +1045,12 @@ static void disp_mix_gasket_config(struct csi_state *state)
 	case MEDIA_BUS_FMT_YUYV8_2X8:
 	case MEDIA_BUS_FMT_YVYU8_2X8:
 	case MEDIA_BUS_FMT_UYVY8_2X8:
-	case MEDIA_BUS_FMT_UYVY8_1X16:
 	case MEDIA_BUS_FMT_VYUY8_2X8:
 		fmt_val = GASKET_0_CTRL_DATA_TYPE_YUV422_8;
 		break;
 	case MEDIA_BUS_FMT_SBGGR8_1X8:
 		fmt_val = GASKET_0_CTRL_DATA_TYPE_RAW8;
 		break;
-	case MEDIA_BUS_FMT_SGBRG8_1X8:
-		fmt_val = GASKET_0_CTRL_DATA_TYPE_RAW8;
-		break;
-	case MEDIA_BUS_FMT_SGRBG8_1X8:
-		fmt_val = GASKET_0_CTRL_DATA_TYPE_RAW8;
-		break;
-	case MEDIA_BUS_FMT_SRGGB8_1X8:
-		fmt_val = GASKET_0_CTRL_DATA_TYPE_RAW8;
-		break;
-
 	case MEDIA_BUS_FMT_SBGGR10_1X10:
 		fmt_val = GASKET_0_CTRL_DATA_TYPE_RAW10;
 		break;
@@ -1079,6 +1079,7 @@ static void disp_mix_gasket_config(struct csi_state *state)
 		pr_err("gasket not support format %d\n", fmt->code);
 		return;
 	}
+	v4l2_dbg(1, debug, &state->sd, "[%s] fmt_val %d\n",__func__,fmt_val);
 
 	regmap_read(gasket, DISP_MIX_GASKET_0_CTRL, &val);
 	if (fmt_val == GASKET_0_CTRL_DATA_TYPE_YUV422_8)
@@ -1091,38 +1092,54 @@ static void disp_mix_gasket_config(struct csi_state *state)
 
 	regmap_write(gasket, DISP_MIX_GASKET_0_HSIZE, mf->width);
 	regmap_write(gasket, DISP_MIX_GASKET_0_VSIZE, mf->height);
+
+	if(debug)
+	{
+		regmap_read(gasket, DISP_MIX_GASKET_0_CTRL, &read_val);
+		regmap_read(gasket, DISP_MIX_GASKET_0_HSIZE, &read_val1);
+		regmap_read(gasket, DISP_MIX_GASKET_0_VSIZE, &read_val2);
+		v4l2_dbg(1, debug, &state->sd, "[%s] GPR_GASKET_0_CTRL= 0x%.8x\n",__func__,read_val);
+		v4l2_dbg(1, debug, &state->sd, "[%s] GPR_GASKET_0_HSIZE= 0x%.8x\n",__func__,read_val1);
+		v4l2_dbg(1, debug, &state->sd, "[%s] GPR_GASKET_0_VSIZE= 0x%.8x\n",__func__,read_val2);
+	}
+	csi_dev_dbg("exit %s\n",__func__);
 }
 
 static void disp_mix_gasket_enable(struct csi_state *state, bool enable)
 {
 	struct regmap *gasket = state->gasket;
-
+	v4l2_dbg(1, debug, &state->sd, "enter %s, enalbe=%d\n",__func__,enable);
 	if (enable)
 		regmap_update_bits(gasket, DISP_MIX_GASKET_0_CTRL,
-					GASKET_0_CTRL_ENABLE,
-					GASKET_0_CTRL_ENABLE);
+				   GASKET_0_CTRL_ENABLE, GASKET_0_CTRL_ENABLE);
 	else
 		regmap_update_bits(gasket, DISP_MIX_GASKET_0_CTRL,
-					GASKET_0_CTRL_ENABLE,
-					0);
+				   GASKET_0_CTRL_ENABLE, 0);
 }
 
 static void mipi_csis_start_stream(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n", __func__);
 	mipi_csis_sw_reset(state);
 
 	disp_mix_gasket_config(state);
 	mipi_csis_set_params(state);
+
+	dump_gasket_regs(state, __func__);
+	
+	msleep(100);
 
 	mipi_csis_system_enable(state, true);
 	disp_mix_gasket_enable(state, true);
 	mipi_csis_enable_interrupts(state, true);
 
 	msleep(5);
+	dump_csis_regs(state, __func__);
 }
 
 static void mipi_csis_stop_stream(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	mipi_csis_enable_interrupts(state, false);
 	mipi_csis_system_enable(state, false);
 	disp_mix_gasket_enable(state, false);
@@ -1132,7 +1149,7 @@ static void mipi_csis_clear_counters(struct csi_state *state)
 {
 	unsigned long flags;
 	int i;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	spin_lock_irqsave(&state->slock, flags);
 	for (i = 0; i < MIPI_CSIS_NUM_EVENTS; i++)
 		state->events[i].counter = 0;
@@ -1143,7 +1160,7 @@ static void mipi_csis_log_counters(struct csi_state *state, bool non_errors)
 {
 	int i = non_errors ? MIPI_CSIS_NUM_EVENTS : MIPI_CSIS_NUM_EVENTS - 4;
 	unsigned long flags;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	spin_lock_irqsave(&state->slock, flags);
 
 	for (i--; i >= 0; i--) {
@@ -1156,8 +1173,8 @@ static void mipi_csis_log_counters(struct csi_state *state, bool non_errors)
 }
 
 static int mipi_csi2_link_setup(struct media_entity *entity,
-			   const struct media_pad *local,
-			   const struct media_pad *remote, u32 flags)
+				const struct media_pad *local,
+				const struct media_pad *remote, u32 flags)
 {
 	return 0;
 }
@@ -1173,7 +1190,7 @@ static int mipi_csis_s_power(struct v4l2_subdev *mipi_sd, int on)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	struct v4l2_subdev *sen_sd;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad subdev */
 	sen_sd = csis_get_remote_subdev(state, __func__);
 	if (!sen_sd) {
@@ -1187,16 +1204,14 @@ static int mipi_csis_s_power(struct v4l2_subdev *mipi_sd, int on)
 static int mipi_csis_s_stream(struct v4l2_subdev *mipi_sd, int enable)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
-
-	v4l2_dbg(1, debug, mipi_sd, "%s: %d, state: 0x%x\n",
-		 __func__, enable, state->flags);
+	csi_dev_dbg("enter %s\n",__func__);
+	v4l2_dbg(1, debug, mipi_sd, "%s: %d, state: 0x%x\n", __func__, enable,
+		 state->flags);
 
 	if (enable) {
 		pm_runtime_get_sync(state->dev);
 		mipi_csis_clear_counters(state);
 		mipi_csis_start_stream(state);
-		dump_csis_regs(state, __func__);
-		dump_gasket_regs(state, __func__);
 	} else {
 		mipi_csis_stop_stream(state);
 		if (debug > 0)
@@ -1208,7 +1223,7 @@ static int mipi_csis_s_stream(struct v4l2_subdev *mipi_sd, int enable)
 }
 
 static int mipi_csis_set_fmt(struct v4l2_subdev *mipi_sd,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_pad_config *cfg,
 			     struct v4l2_subdev_format *format)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
@@ -1217,7 +1232,7 @@ static int mipi_csis_set_fmt(struct v4l2_subdev *mipi_sd,
 	struct media_pad *source_pad;
 	struct v4l2_subdev *sen_sd;
 	int ret;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad */
 	source_pad = csis_get_remote_sensor_pad(state);
 	if (!source_pad) {
@@ -1233,6 +1248,7 @@ static int mipi_csis_set_fmt(struct v4l2_subdev *mipi_sd,
 	}
 
 	format->pad = source_pad->index;
+	mf->code = MEDIA_BUS_FMT_UYVY8_2X8;
 	ret = v4l2_subdev_call(sen_sd, pad, set_fmt, NULL, format);
 	if (ret < 0) {
 		v4l2_err(&state->sd, "%s, set sensor format fail\n", __func__);
@@ -1244,14 +1260,13 @@ static int mipi_csis_set_fmt(struct v4l2_subdev *mipi_sd,
 		csis_fmt = &mipi_csis_formats[0];
 		mf->code = csis_fmt->code;
 	}
-
-	state->csis_fmt = csis_fmt;
+	csi_dev_dbg("exit =%s\n",__func__);
 
 	return 0;
 }
 
 static int mipi_csis_get_fmt(struct v4l2_subdev *mipi_sd,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_pad_config *cfg,
 			     struct v4l2_subdev_format *format)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
@@ -1259,7 +1274,7 @@ static int mipi_csis_get_fmt(struct v4l2_subdev *mipi_sd,
 	struct media_pad *source_pad;
 	struct v4l2_subdev *sen_sd;
 	int ret;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad */
 	source_pad = csis_get_remote_sensor_pad(state);
 	if (!source_pad) {
@@ -1277,20 +1292,24 @@ static int mipi_csis_get_fmt(struct v4l2_subdev *mipi_sd,
 	format->pad = source_pad->index;
 	ret = v4l2_subdev_call(sen_sd, pad, get_fmt, NULL, format);
 	if (ret < 0) {
-		v4l2_err(&state->sd, "%s, call get_fmt of subdev failed!\n", __func__);
+		v4l2_err(&state->sd, "%s, call get_fmt of subdev failed!\n",
+			 __func__);
 		return ret;
 	}
 
 	memcpy(mf, &format->format, sizeof(struct v4l2_mbus_framefmt));
+	csi_dev_dbg("[%s] code=0x%x, width=%d,height=%d \n",__func__
+	,format->format.code,format->format.width,format->format.height);
+	csi_dev_dbg("exit %s\n",__func__);
 	return 0;
 }
 
 static int mipi_csis_s_rx_buffer(struct v4l2_subdev *mipi_sd, void *buf,
-			       unsigned int *size)
+				 unsigned int *size)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	unsigned long flags;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	*size = min_t(unsigned int, *size, MIPI_CSIS_PKTDATA_SIZE);
 
 	spin_lock_irqsave(&state->slock, flags);
@@ -1301,28 +1320,34 @@ static int mipi_csis_s_rx_buffer(struct v4l2_subdev *mipi_sd, void *buf,
 	return 0;
 }
 
-static int mipi_csis_s_frame_interval(struct v4l2_subdev *mipi_sd,
-				struct v4l2_subdev_frame_interval *interval)
+static int
+mipi_csis_s_frame_interval(struct v4l2_subdev *mipi_sd,
+			   struct v4l2_subdev_frame_interval *interval)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	struct v4l2_subdev *sen_sd;
-
+	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad subdev */
 	sen_sd = csis_get_remote_subdev(state, __func__);
 	if (!sen_sd) {
 		v4l2_err(&state->sd, "%s, No remote subdev found!\n", __func__);
 		return -EINVAL;
 	}
-
-	return v4l2_subdev_call(sen_sd, video, s_frame_interval, interval);
+	csi_dev_dbg("[%s] sd name=%s\n",__func__,sen_sd->name );
+	ret = v4l2_subdev_call(sen_sd, video, s_frame_interval, interval);
+	csi_dev_dbg("exit  %s with %d\n",__func__,ret);
+	return ret;
 }
 
-static int mipi_csis_g_frame_interval(struct v4l2_subdev *mipi_sd,
-				struct v4l2_subdev_frame_interval *interval)
+static int
+mipi_csis_g_frame_interval(struct v4l2_subdev *mipi_sd,
+			   struct v4l2_subdev_frame_interval *interval)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	struct v4l2_subdev *sen_sd;
-
+	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad subdev */
 	sen_sd = csis_get_remote_subdev(state, __func__);
 	if (!sen_sd) {
@@ -1330,16 +1355,19 @@ static int mipi_csis_g_frame_interval(struct v4l2_subdev *mipi_sd,
 		return -EINVAL;
 	}
 
-	return v4l2_subdev_call(sen_sd, video, g_frame_interval, interval);
+	ret= v4l2_subdev_call(sen_sd, video, g_frame_interval, interval);
+	csi_dev_dbg("exit  %s with %d\n",__func__,ret);
+	return ret;
 }
 
 static int mipi_csis_enum_framesizes(struct v4l2_subdev *mipi_sd,
-		struct v4l2_subdev_state *sd_state,
-		struct v4l2_subdev_frame_size_enum *fse)
+				     struct v4l2_subdev_pad_config *cfg,
+				     struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	struct v4l2_subdev *sen_sd;
-
+	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad subdev */
 	sen_sd = csis_get_remote_subdev(state, __func__);
 	if (!sen_sd) {
@@ -1347,16 +1375,20 @@ static int mipi_csis_enum_framesizes(struct v4l2_subdev *mipi_sd,
 		return -EINVAL;
 	}
 
-	return v4l2_subdev_call(sen_sd, pad, enum_frame_size, NULL, fse);
+	ret=v4l2_subdev_call(sen_sd, pad, enum_frame_size, NULL, fse);
+	csi_dev_dbg("exit  %s with %d\n",__func__,ret);;
+	return ret;
 }
 
-static int mipi_csis_enum_frameintervals(struct v4l2_subdev *mipi_sd,
-		struct v4l2_subdev_state *sd_state,
-		struct v4l2_subdev_frame_interval_enum *fie)
+static int
+mipi_csis_enum_frameintervals(struct v4l2_subdev *mipi_sd,
+			      struct v4l2_subdev_pad_config *cfg,
+			      struct v4l2_subdev_frame_interval_enum *fie)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
 	struct v4l2_subdev *sen_sd;
-
+	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 	/* Get remote source pad subdev */
 	sen_sd = csis_get_remote_subdev(state, __func__);
 	if (!sen_sd) {
@@ -1364,13 +1396,15 @@ static int mipi_csis_enum_frameintervals(struct v4l2_subdev *mipi_sd,
 		return -EINVAL;
 	}
 
-	return v4l2_subdev_call(sen_sd, pad, enum_frame_interval, NULL, fie);
+	ret = v4l2_subdev_call(sen_sd, pad, enum_frame_interval, NULL, fie);
+	csi_dev_dbg("exit  %s with %d\n",__func__,ret);;
+	return ret;
 }
 
 static int mipi_csis_log_status(struct v4l2_subdev *mipi_sd)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(mipi_sd);
-
+	csi_dev_dbg("enter %s\n",__func__);
 	mutex_lock(&state->lock);
 	mipi_csis_log_counters(state, true);
 	if (debug) {
@@ -1386,44 +1420,32 @@ static int csis_s_fmt(struct v4l2_subdev *sd, struct csi_sam_format *fmt)
 	u32 code;
 	const struct csis_pix_format *csis_format;
 	struct csi_state *state = container_of(sd, struct csi_state, sd);
-
+	csi_dev_dbg("enter %s\n",__func__);
 	switch (fmt->format) {
-	case V4L2_PIX_FMT_SBGGR8:
-	    code = MEDIA_BUS_FMT_SBGGR8_1X8;
-	    break;
-	case V4L2_PIX_FMT_SGBRG8:
-	    code = MEDIA_BUS_FMT_SGBRG8_1X8;
-	    break;
-	case V4L2_PIX_FMT_SGRBG8:
-	    code = MEDIA_BUS_FMT_SGRBG8_1X8;
-	    break;
-	case V4L2_PIX_FMT_SRGGB8:
-	    code = MEDIA_BUS_FMT_SRGGB8_1X8;
-	    break;
 	case V4L2_PIX_FMT_SBGGR10:
-	    code = MEDIA_BUS_FMT_SBGGR10_1X10;
-	    break;
+		code = MEDIA_BUS_FMT_SBGGR10_1X10;
+		break;
 	case V4L2_PIX_FMT_SGBRG10:
-	    code = MEDIA_BUS_FMT_SGBRG10_1X10;
-	    break;
+		code = MEDIA_BUS_FMT_SGBRG10_1X10;
+		break;
 	case V4L2_PIX_FMT_SGRBG10:
-	    code = MEDIA_BUS_FMT_SGRBG10_1X10;
-	    break;
+		code = MEDIA_BUS_FMT_SGRBG10_1X10;
+		break;
 	case V4L2_PIX_FMT_SRGGB10:
-	    code = MEDIA_BUS_FMT_SRGGB10_1X10;
-	    break;
+		code = MEDIA_BUS_FMT_SRGGB10_1X10;
+		break;
 	case V4L2_PIX_FMT_SBGGR12:
-	    code = MEDIA_BUS_FMT_SBGGR12_1X12;
-	    break;
+		code = MEDIA_BUS_FMT_SBGGR12_1X12;
+		break;
 	case V4L2_PIX_FMT_SGBRG12:
-	    code = MEDIA_BUS_FMT_SGBRG12_1X12;
-	    break;
+		code = MEDIA_BUS_FMT_SGBRG12_1X12;
+		break;
 	case V4L2_PIX_FMT_SGRBG12:
-	    code = MEDIA_BUS_FMT_SGRBG12_1X12;
-	    break;
+		code = MEDIA_BUS_FMT_SGRBG12_1X12;
+		break;
 	case V4L2_PIX_FMT_SRGGB12:
-	    code = MEDIA_BUS_FMT_SRGGB12_1X12;
-	    break;
+		code = MEDIA_BUS_FMT_SRGGB12_1X12;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1434,19 +1456,20 @@ static int csis_s_fmt(struct v4l2_subdev *sd, struct csi_sam_format *fmt)
 	state->csis_fmt = csis_format;
 	state->format.width = fmt->width;
 	state->format.height = fmt->height;
-	state->format.code = csis_format->code;
-
 	disp_mix_gasket_config(state);
 	mipi_csis_set_params(state);
+
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 static int csis_s_hdr(struct v4l2_subdev *sd, bool enable)
 {
 	struct csi_state *state = container_of(sd, struct csi_state, sd);
-
+	csi_dev_dbg("enter %s\n",__func__);
 	v4l2_dbg(2, debug, &state->sd, "%s: %d\n", __func__, enable);
 	state->hdr = enable;
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
@@ -1454,30 +1477,33 @@ static int csis_ioc_qcap(struct v4l2_subdev *dev, void *args)
 {
 	struct csi_state *state = mipi_sd_to_csi_state(dev);
 	struct v4l2_capability *cap = (struct v4l2_capability *)args;
+	csi_dev_dbg("enter %s\n",__func__);
 	strlcpy((char *)cap->driver, "csi_sam_subdev", sizeof(cap->driver));
 	cap->bus_info[0] = state->index;
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 #ifdef CONFIG_HARDENED_USERCOPY
-#define USER_TO_KERNEL(TYPE) \
-	({\
-		TYPE tmp; \
-		arg = (void *)(&tmp); \
-		copy_from_user(arg, arg_user, sizeof(TYPE));\
-	})
+#define USER_TO_KERNEL(TYPE)                                                   \
+	do {                                                                   \
+		TYPE tmp;                                                      \
+		arg = (void *)(&tmp);                                          \
+		copy_from_user(arg, arg_user, sizeof(TYPE));                   \
+	} while (0)
 
-#define KERNEL_TO_USER(TYPE) \
-		copy_to_user(arg_user, arg, sizeof(TYPE));
+#define KERNEL_TO_USER(TYPE) copy_to_user(arg_user, arg, sizeof(TYPE));
 #else
 #define USER_TO_KERNEL(TYPE)
 #define KERNEL_TO_USER(TYPE)
 #endif
-static long csis_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg_user)
+static long csis_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd,
+			    void *arg_user)
 {
 	int ret = 1;
 	struct csi_state *state = container_of(sd, struct csi_state, sd);
 	void *arg = arg_user;
+	csi_dev_dbg("enter %s\n",__func__);
 
 	pm_runtime_get_sync(state->dev);
 
@@ -1505,7 +1531,7 @@ static long csis_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg_
 	}
 	case VVCSIOC_S_HDR: {
 		USER_TO_KERNEL(bool);
-		ret = csis_s_hdr(sd, *(bool *) arg);
+		ret = csis_s_hdr(sd, *(bool *)arg);
 		break;
 	}
 	case VIDIOC_QUERYCAP:
@@ -1517,10 +1543,9 @@ static long csis_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg_
 		break;
 	}
 	pm_runtime_put(state->dev);
-
+	csi_dev_dbg("exit  %s with ret %d\n",__func__,ret);
 	return ret;
 }
-
 
 static struct v4l2_subdev_core_ops mipi_csis_core_ops = {
 	.s_power = mipi_csis_s_power,
@@ -1537,10 +1562,10 @@ static struct v4l2_subdev_video_ops mipi_csis_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops mipi_csis_pad_ops = {
-	.enum_frame_size       = mipi_csis_enum_framesizes,
-	.enum_frame_interval   = mipi_csis_enum_frameintervals,
-	.get_fmt               = mipi_csis_get_fmt,
-	.set_fmt               = mipi_csis_set_fmt,
+	.enum_frame_size = mipi_csis_enum_framesizes,
+	.enum_frame_interval = mipi_csis_enum_frameintervals,
+	.get_fmt = mipi_csis_get_fmt,
+	.set_fmt = mipi_csis_set_fmt,
 };
 
 static struct v4l2_subdev_ops mipi_csis_subdev_ops = {
@@ -1555,8 +1580,13 @@ static irqreturn_t mipi_csis_irq_handler(int irq, void *dev_id)
 	struct csis_pktbuf *pktbuf = &state->pkt_buf;
 	unsigned long flags;
 	u32 status;
+	u32 dphy_status;
+
+	csi_dev_dbg("enter %s\n",__func__);
 
 	status = mipi_csis_read(state, MIPI_CSIS_INTSRC);
+	dphy_status = mipi_csis_read(state,MIPI_CSIS_DPHYSTATUS);
+	csi_dev_dbg("[%s] dphy status=0x%x, int status=0x%x\n",__func__,dphy_status,status);
 
 	spin_lock_irqsave(&state->slock, flags);
 	if ((status & MIPI_CSIS_INTSRC_NON_IMAGE_DATA) && pktbuf->data) {
@@ -1588,17 +1618,21 @@ static irqreturn_t mipi_csis_irq_handler(int irq, void *dev_id)
 	spin_unlock_irqrestore(&state->slock, flags);
 
 	mipi_csis_write(state, MIPI_CSIS_INTSRC, status);
+	csi_dev_dbg("exit  %s \n",__func__);
 	return IRQ_HANDLED;
 }
 
 static int mipi_csis_parse_dt(struct platform_device *pdev,
-			    struct csi_state *state)
+			      struct csi_state *state)
 {
 	struct device_node *node = pdev->dev.of_node;
 
+	csi_dev_dbg("enter %s\n",__func__);
+
 	state->index = of_alias_get_id(node, "csi");
 
-	if (of_property_read_u32(node, "clock-frequency", &state->clk_frequency))
+	if (of_property_read_u32(node, "clock-frequency",
+				 &state->clk_frequency))
 		state->clk_frequency = DEFAULT_SCLK_CSIS_FREQ;
 
 	if (of_property_read_u32(node, "bus-width", &state->max_num_lanes))
@@ -1616,11 +1650,17 @@ static int mipi_csis_parse_dt(struct platform_device *pdev,
 	of_property_read_u32(node, "data-lanes", &state->num_lanes);
 
 	state->wclk_ext = of_property_read_bool(node, "csis-wclk");
+	//by mirika
+	state->clk_unalive = of_property_read_bool(node,"clk-unalive");
 
 	of_node_put(node);
 	csi_dev_dbg("csis-hs-settle %u\n", state->hs_settle);
 	csi_dev_dbg("csis-clk-settle %u\n", state->clk_settle);
 	csi_dev_dbg("data-lanes %u\n", state->num_lanes);
+	csi_dev_dbg("csis-wclk %d\n", state->wclk_ext);
+	csi_dev_dbg("clk-unalive %d\n",state->clk_unalive);
+	csi_dev_dbg("exit  %s \n",__func__);
+	g_clk_unalive = state->clk_unalive;
 	g_hs_settle = state->hs_settle;
 	g_clk_settle = state->clk_settle;
 	return 0;
@@ -1630,11 +1670,13 @@ static const struct of_device_id mipi_csis_of_match[];
 
 /* init subdev */
 static int mipi_csis_subdev_init(struct v4l2_subdev *mipi_sd,
-		struct platform_device *pdev,
-		const struct v4l2_subdev_ops *ops)
+				 struct platform_device *pdev,
+				 const struct v4l2_subdev_ops *ops)
 {
 	struct csi_state *state = platform_get_drvdata(pdev);
 	int ret = 0;
+
+	csi_dev_dbg("enter %s\n",__func__);
 
 	v4l2_subdev_init(mipi_sd, ops);
 	mipi_sd->owner = THIS_MODULE;
@@ -1644,14 +1686,15 @@ static int mipi_csis_subdev_init(struct v4l2_subdev *mipi_sd,
 	mipi_sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	mipi_sd->dev = &pdev->dev;
 
-	state->csis_fmt      = &mipi_csis_formats[0];
-	state->format.code   = mipi_csis_formats[0].code;
-	state->format.width  = MIPI_CSIS_DEF_PIX_WIDTH;
+	state->csis_fmt = &mipi_csis_formats[0];
+	state->format.code = mipi_csis_formats[0].code;
+	state->format.width = MIPI_CSIS_DEF_PIX_WIDTH;
 	state->format.height = MIPI_CSIS_DEF_PIX_HEIGHT;
 
 	/* This allows to retrieve the platform device id by the host driver */
 	v4l2_set_subdevdata(mipi_sd, state);
 
+	csi_dev_dbg("exit  %s with ret %d\n",__func__,ret);
 	return ret;
 }
 
@@ -1669,13 +1712,15 @@ static int mipi_csis_imx8mn_parse_resets(struct csi_state *state)
 	const char *compat;
 	uint32_t len, rstc_num = 0;
 
-	ret = of_parse_phandle_with_args(np, "resets", "#reset-cells",
-					 0, &args);
+	csi_dev_dbg("enter %s\n",__func__);
+
+	ret = of_parse_phandle_with_args(np, "resets", "#reset-cells", 0,
+					 &args);
 	if (ret)
-		return ret == -ENOENT ? 0 : ret;
+		return ret;
 
 	parent = args.np;
-	for_each_child_of_node(parent, child) {
+	for_each_child_of_node (parent, child) {
 		compat = of_get_property(child, "compatible", NULL);
 		if (!compat)
 			continue;
@@ -1705,33 +1750,37 @@ static int mipi_csis_imx8mn_parse_resets(struct csi_state *state)
 	}
 	of_node_put(parent);
 
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 static int mipi_csis_imx8mn_resets_assert(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!state->soft_resetn)
-		return 0;
+		return -EINVAL;
 
 	return reset_control_assert(state->soft_resetn);
 }
 
 static int mipi_csis_imx8mn_resets_deassert(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!state->soft_resetn)
-		return 0;
+		return -EINVAL;
 
 	return reset_control_deassert(state->soft_resetn);
 }
 
 static struct mipi_csis_rst_ops imx8mn_rst_ops = {
-	.parse  = mipi_csis_imx8mn_parse_resets,
+	.parse = mipi_csis_imx8mn_parse_resets,
 	.assert = mipi_csis_imx8mn_resets_assert,
 	.deassert = mipi_csis_imx8mn_resets_deassert,
 };
 
 static int mipi_csis_imx8mn_gclk_get(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	if (state->clk_enable)
 		return 0;
 
@@ -1740,29 +1789,33 @@ static int mipi_csis_imx8mn_gclk_get(struct csi_state *state)
 
 static int mipi_csis_imx8mn_gclk_enable(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!state->clk_enable)
-		return 0;
+		return -EINVAL;
 
 	return reset_control_assert(state->clk_enable);
 }
 
 static int mipi_csis_imx8mn_gclk_disable(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
 	if (!state->clk_enable)
-		return 0;
+		return -EINVAL;
 
 	return reset_control_deassert(state->clk_enable);
 }
 
 static struct mipi_csis_gate_clk_ops imx8mn_gclk_ops = {
 	.gclk_get = mipi_csis_imx8mn_gclk_get,
-	.gclk_enable  = mipi_csis_imx8mn_gclk_enable,
+	.gclk_enable = mipi_csis_imx8mn_gclk_enable,
 	.gclk_disable = mipi_csis_imx8mn_gclk_disable,
 };
 
 static void mipi_csis_imx8mn_phy_reset(struct csi_state *state)
 {
 	struct reset_control *reset = state->mipi_reset;
+
+	csi_dev_dbg("enter %s\n",__func__);
 
 	reset_control_assert(reset);
 	usleep_range(10, 20);
@@ -1776,9 +1829,9 @@ static struct mipi_csis_phy_ops imx8mn_phy_ops = {
 };
 
 static struct mipi_csis_pdata mipi_csis_imx8mn_pdata = {
-	.rst_ops  = &imx8mn_rst_ops,
+	.rst_ops = &imx8mn_rst_ops,
 	.gclk_ops = &imx8mn_gclk_ops,
-	.phy_ops  = &imx8mn_phy_ops,
+	.phy_ops = &imx8mn_phy_ops,
 	.use_mix_gpr = false,
 };
 
@@ -1790,7 +1843,9 @@ static int mipi_csis_imx8mp_parse_resets(struct csi_state *state)
 	struct device *dev = state->dev;
 	struct reset_control *reset;
 
-	reset = devm_reset_control_get_optional(dev, "csi_rst_pclk");
+	csi_dev_dbg("enter %s\n",__func__);
+
+	reset = devm_reset_control_get(dev, "csi_rst_pclk");
 	if (IS_ERR(reset)) {
 		if (PTR_ERR(reset) != -EPROBE_DEFER)
 			dev_err(dev, "Failed to get csi pclk reset control\n");
@@ -1798,14 +1853,14 @@ static int mipi_csis_imx8mp_parse_resets(struct csi_state *state)
 	}
 	state->csi_rst_pclk = reset;
 
-	reset = devm_reset_control_get_optional(dev, "csi_rst_aclk");
+	reset = devm_reset_control_get(dev, "csi_rst_aclk");
 	if (IS_ERR(reset)) {
 		if (PTR_ERR(reset) != -EPROBE_DEFER)
 			dev_err(dev, "Failed to get csi aclk reset control\n");
 		return PTR_ERR(reset);
 	}
 	state->csi_rst_aclk = reset;
-
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
@@ -1814,8 +1869,10 @@ static int mipi_csis_imx8mp_resets_assert(struct csi_state *state)
 	struct device *dev = state->dev;
 	int ret;
 
+	csi_dev_dbg("enter %s\n",__func__);
+
 	if (!state->csi_rst_pclk || !state->csi_rst_aclk)
-		return 0;
+		return -EINVAL;
 
 	ret = reset_control_assert(state->csi_rst_pclk);
 	if (ret) {
@@ -1828,23 +1885,26 @@ static int mipi_csis_imx8mp_resets_assert(struct csi_state *state)
 		dev_err(dev, "Failed to assert csi aclk reset control\n");
 		return ret;
 	}
-
+	csi_dev_dbg("exit  %s \n",__func__);
 	return ret;
 }
 
 static int mipi_csis_imx8mp_resets_deassert(struct csi_state *state)
 {
+	csi_dev_dbg("enter %s\n",__func__);
+
 	if (!state->csi_rst_pclk || !state->csi_rst_aclk)
-		return 0;
+		return -EINVAL;
 
 	reset_control_deassert(state->csi_rst_pclk);
 	reset_control_deassert(state->csi_rst_aclk);
 
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 static struct mipi_csis_rst_ops imx8mp_rst_ops = {
-	.parse  = mipi_csis_imx8mp_parse_resets,
+	.parse = mipi_csis_imx8mp_parse_resets,
 	.assert = mipi_csis_imx8mp_resets_assert,
 	.deassert = mipi_csis_imx8mp_resets_deassert,
 };
@@ -1852,21 +1912,22 @@ static struct mipi_csis_rst_ops imx8mp_rst_ops = {
 static int mipi_csis_imx8mp_gclk_get(struct csi_state *state)
 {
 	struct device *dev = state->dev;
+	csi_dev_dbg("enter %s\n",__func__);
 
-	state->csi_pclk = devm_clk_get_optional(dev, "media_blk_csi_pclk");
+	state->csi_pclk = devm_clk_get(dev, "media_blk_csi_pclk");
 	if (IS_ERR(state->csi_pclk)) {
 		if (PTR_ERR(state->csi_pclk) != -EPROBE_DEFER)
 			dev_err(dev, "Failed to get media csi pclk\n");
 		return PTR_ERR(state->csi_pclk);
 	}
 
-	state->csi_aclk = devm_clk_get_optional(dev, "media_blk_csi_aclk");
+	state->csi_aclk = devm_clk_get(dev, "media_blk_csi_aclk");
 	if (IS_ERR(state->csi_aclk)) {
-		if (PTR_ERR(state->csi_aclk) != -EPROBE_DEFER)
+		if (PTR_ERR(state->csi_pclk) != -EPROBE_DEFER)
 			dev_err(dev, "Failed to get media csi aclk\n");
-		return PTR_ERR(state->csi_aclk);
+		return PTR_ERR(state->csi_pclk);
 	}
-
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
@@ -1874,6 +1935,7 @@ static int mipi_csis_imx8mp_gclk_enable(struct csi_state *state)
 {
 	struct device *dev = state->dev;
 	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 
 	ret = clk_prepare_enable(state->csi_pclk);
 	if (ret) {
@@ -1886,7 +1948,7 @@ static int mipi_csis_imx8mp_gclk_enable(struct csi_state *state)
 		dev_err(dev, "enable csi_aclk failed!\n");
 		return ret;
 	}
-
+	csi_dev_dbg("exit  %s \n",__func__);
 	return ret;
 }
 
@@ -1894,108 +1956,36 @@ static int mipi_csis_imx8mp_gclk_disable(struct csi_state *state)
 {
 	clk_disable_unprepare(state->csi_pclk);
 	clk_disable_unprepare(state->csi_aclk);
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 static struct mipi_csis_gate_clk_ops imx8mp_gclk_ops = {
 	.gclk_get = mipi_csis_imx8mp_gclk_get,
-	.gclk_enable  = mipi_csis_imx8mp_gclk_enable,
+	.gclk_enable = mipi_csis_imx8mp_gclk_enable,
 	.gclk_disable = mipi_csis_imx8mp_gclk_disable,
 };
 
-static void mipi_csis_imx8mp_dewarp_ctl_data_type(struct csi_state *state,
-		int bus_width)
-{
-	switch (state->index) {
-	case 0:
-		state->val = ISP_DEWARP_CTRL_ISP_0_DATA_TYPE(bus_width);
-		break;
-	case 1:
-		state->val = ISP_DEWARP_CTRL_ISP_1_DATA_TYPE(bus_width);
-		break;
-	default:
-		v4l2_err(&state->sd, "%s :csi subdev index err!\n", __func__);
-		break;
-	}
-}
-
-static void mipi_csis_imx8mp_dewarp_ctl_left_just_mode(struct csi_state *state)
-{
-	switch (state->index) {
-	case 0:
-		state->val |= ISP_DEWARP_CTRL_ISP_0_LEFT_JUST_MODE;
-		break;
-	case 1:
-		state->val |= ISP_DEWARP_CTRL_ISP_1_LEFT_JUST_MODE;
-		break;
-	default:
-		v4l2_err(&state->sd, "%s :csi subdev index err!\n", __func__);
-		break;
-	}
-}
-
 static void mipi_csis_imx8mp_phy_reset(struct csi_state *state)
 {
-	int ret = 0;
-	struct v4l2_subdev *sen_sd;
-
-	struct v4l2_subdev_mbus_code_enum code = {
-		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-	};
+	u32 val;
+	csi_dev_dbg("enter %s\n",__func__);
 
 	mipi_csis_imx8mn_phy_reset(state);
-	sen_sd = csis_get_remote_subdev(state, __func__);
-	if (!sen_sd)
-		goto csi_phy_initial_cfg;
-
-	ret = v4l2_subdev_call(sen_sd, pad, enum_mbus_code, NULL, &code);
-	if (ret < 0 && ret != -ENOIOCTLCMD) {
-		v4l2_err(&state->sd, "enum_mbus_code error !!!\n");
-		return;
-	} else if (ret == -ENOIOCTLCMD)
-		goto csi_phy_initial_cfg;
 
 	/* temporary place */
 	if (state->mix_gpr) {
-		if ((code.code == MEDIA_BUS_FMT_SRGGB8_1X8) ||
-				(code.code == MEDIA_BUS_FMT_SGRBG8_1X8) ||
-				(code.code == MEDIA_BUS_FMT_SGBRG8_1X8) ||
-				(code.code == MEDIA_BUS_FMT_SBGGR8_1X8)) {
-			mipi_csis_imx8mp_dewarp_ctl_data_type(state,
-					 ISP_DEWARP_CTRL_DATA_TYPE_RAW8);
-			v4l2_dbg(1, debug, &state->sd,
-					"%s: bus fmt is 8 bit!\n", __func__);
-		} else if ((code.code == MEDIA_BUS_FMT_SRGGB10_1X10) ||
-				(code.code == MEDIA_BUS_FMT_SGRBG10_1X10) ||
-				(code.code == MEDIA_BUS_FMT_SGBRG10_1X10) ||
-				(code.code == MEDIA_BUS_FMT_SBGGR10_1X10)) {
-			mipi_csis_imx8mp_dewarp_ctl_data_type(state,
-					ISP_DEWARP_CTRL_DATA_TYPE_RAW10);
-			v4l2_dbg(1, debug, &state->sd,
-					"%s: bus fmt is 10 bit !\n", __func__);
-		} else {
-			mipi_csis_imx8mp_dewarp_ctl_data_type(state,
-					ISP_DEWARP_CTRL_DATA_TYPE_RAW12);
-			v4l2_dbg(1, debug, &state->sd,
-					"%s: bus fmt is 12 bit !\n", __func__);
-		}
-		goto write_regmap;
-	}
-
-csi_phy_initial_cfg:
-	mipi_csis_imx8mp_dewarp_ctl_data_type(state,
+		val = ISP_DEWARP_CTRL_ISP_0_DATA_TYPE(
 			ISP_DEWARP_CTRL_DATA_TYPE_RAW12);
-	v4l2_dbg(1, debug, &state->sd,
-			"%s: bus fmt is 12 bit !\n", __func__);
+		val |= ISP_DEWARP_CTRL_ISP_1_DATA_TYPE(
+			ISP_DEWARP_CTRL_DATA_TYPE_RAW12);
+		val |= ISP_DEWARP_CTRL_ID_MODE(ISP_DEWARP_CTRL_ID_MODE_012);
+		val |= ISP_DEWARP_CTRL_ISP_0_LEFT_JUST_MODE;
+		val |= ISP_DEWARP_CTRL_ISP_1_LEFT_JUST_MODE;
 
-write_regmap:
-	state->val |= ISP_DEWARP_CTRL_ID_MODE(ISP_DEWARP_CTRL_ID_MODE_012);
-	mipi_csis_imx8mp_dewarp_ctl_left_just_mode(state);
-	if (state->mix_gpr)
-		regmap_update_bits(state->mix_gpr, ISP_DEWARP_CTRL,
-			state->val, state->val);
-
-	return;
+		regmap_write(state->mix_gpr, ISP_DEWARP_CTRL, val);
+	}
+	csi_dev_dbg("exit  %s \n",__func__);
 }
 
 static struct mipi_csis_phy_ops imx8mp_phy_ops = {
@@ -2003,9 +1993,9 @@ static struct mipi_csis_phy_ops imx8mp_phy_ops = {
 };
 
 static struct mipi_csis_pdata mipi_csis_imx8mp_pdata = {
-	.rst_ops  = &imx8mp_rst_ops,
+	.rst_ops = &imx8mp_rst_ops,
 	.gclk_ops = &imx8mp_gclk_ops,
-	.phy_ops  = &imx8mp_phy_ops,
+	.phy_ops = &imx8mp_phy_ops,
 	.use_mix_gpr = true,
 };
 
@@ -2018,6 +2008,8 @@ static int mipi_csis_probe(struct platform_device *pdev)
 	const struct of_device_id *of_id;
 	int ret = -ENOMEM;
 
+	pr_info("enter %s[%d]\n",__func__,__LINE__);
+
 	state = devm_kzalloc(dev, sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return -ENOMEM;
@@ -2028,7 +2020,6 @@ static int mipi_csis_probe(struct platform_device *pdev)
 	state->pdev = pdev;
 	mipi_sd = &state->sd;
 	state->dev = dev;
-	state->val = 0;
 
 	ret = mipi_csis_parse_dt(pdev, state);
 	if (ret < 0)
@@ -2051,7 +2042,8 @@ static int mipi_csis_probe(struct platform_device *pdev)
 	}
 	state->pdata = of_id->data;
 
-	state->gasket = syscon_regmap_lookup_by_phandle(dev->of_node, "csi-gpr");
+	state->gasket =
+		syscon_regmap_lookup_by_phandle(dev->of_node, "csi-gpr");
 	if (IS_ERR(state->gasket)) {
 		dev_err(dev, "failed to get csi gasket\n");
 		return PTR_ERR(state->gasket);
@@ -2062,7 +2054,8 @@ static int mipi_csis_probe(struct platform_device *pdev)
 		return ret;
 
 	if (state->pdata->use_mix_gpr) {
-		state->mix_gpr = syscon_regmap_lookup_by_phandle(dev->of_node, "gpr");
+		state->mix_gpr =
+			syscon_regmap_lookup_by_phandle(dev->of_node, "gpr");
 		if (IS_ERR(state->mix_gpr)) {
 			dev_err(dev, "failed to get mix gpr\n");
 			return PTR_ERR(state->mix_gpr);
@@ -2123,7 +2116,8 @@ static int mipi_csis_probe(struct platform_device *pdev)
 	state->pads[MIPI_CSIS_VC1_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
 	state->pads[MIPI_CSIS_VC2_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
 	state->pads[MIPI_CSIS_VC3_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
-	ret = media_entity_pads_init(&state->sd.entity, MIPI_CSIS_VCX_PADS_NUM, state->pads);
+	ret = media_entity_pads_init(&state->sd.entity, MIPI_CSIS_VCX_PADS_NUM,
+				     state->pads);
 	if (ret < 0) {
 		dev_err(dev, "mipi csi entity pad init failed\n");
 		return ret;
@@ -2134,21 +2128,31 @@ static int mipi_csis_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
-	dev_info(&pdev->dev, "lanes: %d, hs_settle: %d, clk_settle: %d, wclk: %d, freq: %u\n",
-		 state->num_lanes, state->hs_settle, state->clk_settle,
-		 state->wclk_ext, state->clk_frequency);
+	dev_info(
+		&pdev->dev,
+		"lanes: %d, hs_settle: %d, clk_settle: %d, wclk: %d, freq: %u\n",
+		state->num_lanes, state->hs_settle, state->clk_settle,
+		state->wclk_ext, state->clk_frequency);
+	csi_dev_dbg(
+		"lanes: %d, hs_settle: %d, clk_settle: %d, wclk: %d, freq: %u\n",
+		state->num_lanes, state->hs_settle, state->clk_settle,
+		state->wclk_ext, state->clk_frequency);	
+
+	csi_dev_dbg("exit  %s \n",__func__);
 	return 0;
 }
 
 static int mipi_csis_system_suspend(struct device *dev)
 {
-	return pm_runtime_force_suspend(dev);;
+	csi_dev_dbg("enter %s\n",__func__);
+	return pm_runtime_force_suspend(dev);
+	;
 }
 
 static int mipi_csis_system_resume(struct device *dev)
 {
 	int ret;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	ret = pm_runtime_force_resume(dev);
 	if (ret < 0) {
 		dev_err(dev, "force resume %s failed!\n", dev_name(dev));
@@ -2162,7 +2166,7 @@ static int mipi_csis_runtime_suspend(struct device *dev)
 {
 	struct csi_state *state = dev_get_drvdata(dev);
 	int ret;
-
+	csi_dev_dbg("enter %s\n",__func__);
 	ret = regulator_disable(state->mipi_phy_regulator);
 	if (ret < 0)
 		return ret;
@@ -2176,6 +2180,7 @@ static int mipi_csis_runtime_resume(struct device *dev)
 {
 	struct csi_state *state = dev_get_drvdata(dev);
 	int ret;
+	csi_dev_dbg("enter %s\n",__func__);
 
 	ret = regulator_enable(state->mipi_phy_regulator);
 	if (ret < 0)
@@ -2189,6 +2194,7 @@ static int mipi_csis_runtime_resume(struct device *dev)
 	disp_mix_sft_rstn(state, false);
 	mipi_csis_phy_reset(state);
 
+	csi_dev_dbg("exit %s \n",__func__);
 	return 0;
 }
 
@@ -2202,16 +2208,18 @@ static int mipi_csis_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct dev_pm_ops mipi_csis_pm_ops = {
-	SET_RUNTIME_PM_OPS(mipi_csis_runtime_suspend, mipi_csis_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(mipi_csis_system_suspend, mipi_csis_system_resume)
-};
+static const struct dev_pm_ops mipi_csis_pm_ops = { SET_RUNTIME_PM_OPS(
+	mipi_csis_runtime_suspend, mipi_csis_runtime_resume,
+	NULL) SET_SYSTEM_SLEEP_PM_OPS(mipi_csis_system_suspend,
+				      mipi_csis_system_resume) };
 
 static const struct of_device_id mipi_csis_of_match[] = {
-	{	.compatible = "fsl,imx8mn-mipi-csi",
+	{
+		.compatible = "fsl,imx8mn-mipi-csi",
 		.data = (void *)&mipi_csis_imx8mn_pdata,
 	},
-	{	.compatible = "fsl,imx8mp-mipi-csi",
+	{
+		.compatible = "fsl,imx8mp-mipi-csi",
 		.data = (void *)&mipi_csis_imx8mp_pdata,
 	},
 	{ /* sentinel */ },

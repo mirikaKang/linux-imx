@@ -160,7 +160,7 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-basler-isp0-m7.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-basler-isp0.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-m7.dtb
 
-dtb-$(CONFIG_ARCH_MXC) += imx8mn-var-som-symphony-abyz-dscam6.dtb
+dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-abyz-dscam6.dtb
 
 imx8mp-var-som-1.x-symphony-dtbs := imx8mp-var-som-symphony.dtb imx8mp-var-som-1.x.dtbo
 imx8mp-var-som-1.x-symphony-2nd-ov5640-m7-dtbs := imx8mp-var-som-symphony-2nd-ov5640-m7.dtb imx8mp-var-som-1.x.dtbo
