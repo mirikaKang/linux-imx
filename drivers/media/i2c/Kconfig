@@ -456,6 +456,17 @@ config VIDEO_OV5640
 	  This is a Video4Linux2 sensor driver for the Omnivision
 	  OV5640 camera sensor with a MIPI CSI-2 interface.
 
+config VIDEO_DSCAM6
+	tristate "H&Abyz X-ray detector Image Driver"
+	depends on OF
+	depends on VIDEO_DEV && I2C
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+		This is a Video4Linux2 image driver for the H&Abyz X-ray detector
+		with MIPI CSI2 interface 
+
 config VIDEO_OV5645
 	tristate "OmniVision OV5645 sensor support"
 	depends on OF
@@ -677,16 +688,7 @@ config VIDEO_OV9734
 	  To compile this driver as a module, choose M here: the
 	  module's name is ov9734.
 
-config VIDEO_DSCAM6
-	tristate "H&Abyz X-ray detector Image Driver"
-	depends on VIDEO_DEV
-	depends on VIDEO_V4L2
-	select MEDIA_CONTROLLER
-	select VIDEO_V4L2_SUBDEV_API
-	select V4L2_FWNODE
-	help
-		This is a Video4Linux2 image driver for the H&Abyz X-ray detector
-		with MIPI CSI2 interface 
+
 
 config VIDEO_AP1302
 	tristate "ON Semiconductor's Advanced Image Coporcessor AP1302 support"
