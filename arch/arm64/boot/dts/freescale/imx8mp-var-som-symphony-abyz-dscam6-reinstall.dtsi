@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2019 NXP
+ * Copyright 2020-2021 Variscite Ltd.
+ */
+
+#define DSCAM6_NOT_USED	1
+
+&i2c3{
+
+#if DSCAM6_NOT_USED 
+		ov5640_mipi0: ov5640_mipi@3c {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_csi0>;
+		clocks = <&clk IMX8MP_CLK_IPP_DO_CLKO2>;
+		clock-names = "xclk";
+/* Disabled CLKO2, since DART-MX8MP camera expansion board uses
+ * its own oscillator. Enable CLK02 if your desing requres it
+ */
+#if 0
+		assigned-clocks = <&clk IMX8MP_CLK_IPP_DO_CLKO2>;
+		assigned-clock-parents = <&clk IMX8MP_CLK_24M>;
+#endif
+		assigned-clock-rates = <24000000>;
+		csi_id = <0>;
+		powerdown-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio1 0 GPIO_ACTIVE_LOW>;
+		mclk = <24000000>;
+		mclk_source = <0>;
+		mipi_csi;
+		status = "okay";
+
+		port {
+			ov5640_mipi_0_ep: endpoint {
+				remote-endpoint = <&mipi_csi0_ep>;
+				data-lanes = <1 2 3 4>;
+				clock-lanes = <0>;
+			};
+		};
+	};
+
+#else
+	/delete-node/ov5640_mipi@3c; 
+
+	dscam6@58{
+		compatible="abyz,dscam6";
+		reg=<0x58>;
+		csi_id=<0x00>;
+		/* mipi_csi;*/
+		mclk = <24000000>;
+		mclk_source = <0>;
+		mipi_csi;
+		status = "okay";
+	
+		port{
+			dscam6_ep_0:endpoint{
+				data-lanes = < 1 2 3 4>;
+				clock-lanes = <0>;
+				remote-endpoint = <&mipi_csi0_ep>;
+			};
+		};
+	};
+#endif
+
+};
+
+&mipi_csi_0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	port@0 {
+		reg = <0>;
+		mipi_csi0_ep: endpoint {
+		#if DSCAM6_NOT_USED
+			remote-endpoint = <&ov5640_mipi_0_ep>;
+		#else
+			remote-endpoint = <&dscam6_ep_0>;
+		#endif
+			data-lanes = <4>;
+			csis-hs-settle = <6>;
+			csis-clk-settle = <2>;
+			csis-wclk;
+		};
+	};
+};
+
+&mipi_csi_1 {
+	status = "disabled";
+};
+
+&cameradev {
+	status = "okay";
+};
+
+&isi_0 {
+	status = "okay";
+
+	cap_device {
+		status = "okay";
+	};
+
+	m2m_device {
+		status = "okay";
+	};
+};
+
+&isi_1 {
+	status = "disabled";
+};

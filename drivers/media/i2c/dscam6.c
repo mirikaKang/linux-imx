@@ -4,8 +4,8 @@
  * Copyright (C) 2014-2017 Mentor Graphics Inc.
  */
 
-#include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/clkdev.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
@@ -25,122 +25,144 @@
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
-/* min/typical/max system clock (xclk) frequencies */
-#define OV5640_XCLK_MIN  6000000
-#define OV5640_XCLK_MAX 54000000
+#define CAM_DRVIE_NAME "dscam6"
 
-#define OV5640_NATIVE_WIDTH     2624
-#define OV5640_NATIVE_HEIGHT        1964
-#define OV5640_PIXEL_ARRAY_TOP      14
-#define OV5640_PIXEL_ARRAY_LEFT     16
-#define OV5640_PIXEL_ARRAY_WIDTH    2592
-#define OV5640_PIXEL_ARRAY_HEIGHT   1944
+// for internel driver debug
+#define DEV_DBG_EN 1
+#if (DEV_DBG_EN == 1)
+#define csi_dev_dbg(x, arg...)                                                                                                                                 \
+    printk("[CAM_DEBUG][%s]"                                                                                                                                   \
+           "[%06d]" x,                                                                                                                                         \
+           CAM_DRVIE_NAME, __LINE__, ##arg)
+#else
+#define csi_dev_dbg(x, arg...)
+#endif
+#define csi_dev_err(x, arg...)                                                                                                                                 \
+    printk(KERN_ERR "[CAM_ERR][$s]"                                                                                                                            \
+                    "[%06d]" x,                                                                                                                                \
+           CAM_DRVIE_NAME, __LINE__, ##arg)
+#define csi_dev_print(x, arg...) printk(KERN_INFO "[CAM][%s][%d]" x, CAM_DRVIE_NAME, __LINE__, ##arg)
+
+#define DSCAM6_NATIVE_WIDTH 2624
+#define DSCAM6_NATIVE_HEIGHT 1964
+#define DSCAM6_PIXEL_ARRAY_TOP 14
+#define DSCAM6_PIXEL_ARRAY_LEFT 16
+#define DSCAM6_PIXEL_ARRAY_WIDTH 2592
+#define DSCAM6_PIXEL_ARRAY_HEIGHT 1944
+
+#if 0
+/* min/typical/max system clock (xclk) frequencies */
+#define DSCAM6_XCLK_MIN 6000000
+#define DSCAM6_XCLK_MAX 54000000
+
 
 /* FIXME: not documented. */
-#define OV5640_MIN_VBLANK   24
-#define OV5640_MAX_VTS      3375
+#define DSCAM6_MIN_VBLANK 24
+#define DSCAM6_MAX_VTS 3375
 
-#define OV5640_DEFAULT_SLAVE_ID 0x3c
+#define DSCAM6_DEFAULT_SLAVE_ID 0x3c
 
-#define OV5640_LINK_RATE_MAX        490000000U
+#define DSCAM6_LINK_RATE_MAX 490000000U
 
-#define OV5640_REG_SYS_RESET02      0x3002
-#define OV5640_REG_SYS_CLOCK_ENABLE02   0x3006
-#define OV5640_REG_SYS_CTRL0        0x3008
-#define OV5640_REG_SYS_CTRL0_SW_PWDN    0x42
-#define OV5640_REG_SYS_CTRL0_SW_PWUP    0x02
-#define OV5640_REG_SYS_CTRL0_SW_RST 0x82
-#define OV5640_REG_CHIP_ID      0x300a
-#define OV5640_REG_IO_MIPI_CTRL00   0x300e
-#define OV5640_REG_PAD_OUTPUT_ENABLE01  0x3017
-#define OV5640_REG_PAD_OUTPUT_ENABLE02  0x3018
-#define OV5640_REG_PAD_OUTPUT00     0x3019
-#define OV5640_REG_SYSTEM_CONTROL1  0x302e
-#define OV5640_REG_SC_PLL_CTRL0     0x3034
-#define OV5640_REG_SC_PLL_CTRL1     0x3035
-#define OV5640_REG_SC_PLL_CTRL2     0x3036
-#define OV5640_REG_SC_PLL_CTRL3     0x3037
-#define OV5640_REG_SLAVE_ID     0x3100
-#define OV5640_REG_SCCB_SYS_CTRL1   0x3103
-#define OV5640_REG_SYS_ROOT_DIVIDER 0x3108
-#define OV5640_REG_AWB_R_GAIN       0x3400
-#define OV5640_REG_AWB_G_GAIN       0x3402
-#define OV5640_REG_AWB_B_GAIN       0x3404
-#define OV5640_REG_AWB_MANUAL_CTRL  0x3406
-#define OV5640_REG_AEC_PK_EXPOSURE_HI   0x3500
-#define OV5640_REG_AEC_PK_EXPOSURE_MED  0x3501
-#define OV5640_REG_AEC_PK_EXPOSURE_LO   0x3502
-#define OV5640_REG_AEC_PK_MANUAL    0x3503
-#define OV5640_REG_AEC_PK_REAL_GAIN 0x350a
-#define OV5640_REG_AEC_PK_VTS       0x350c
-#define OV5640_REG_TIMING_HS        0x3800
-#define OV5640_REG_TIMING_VS        0x3802
-#define OV5640_REG_TIMING_HW        0x3804
-#define OV5640_REG_TIMING_VH        0x3806
-#define OV5640_REG_TIMING_DVPHO     0x3808
-#define OV5640_REG_TIMING_DVPVO     0x380a
-#define OV5640_REG_TIMING_HTS       0x380c
-#define OV5640_REG_TIMING_VTS       0x380e
-#define OV5640_REG_TIMING_HOFFS     0x3810
-#define OV5640_REG_TIMING_VOFFS     0x3812
-#define OV5640_REG_TIMING_TC_REG20  0x3820
-#define OV5640_REG_TIMING_TC_REG21  0x3821
-#define OV5640_REG_AEC_CTRL00       0x3a00
-#define OV5640_REG_AEC_B50_STEP     0x3a08
-#define OV5640_REG_AEC_B60_STEP     0x3a0a
-#define OV5640_REG_AEC_CTRL0D       0x3a0d
-#define OV5640_REG_AEC_CTRL0E       0x3a0e
-#define OV5640_REG_AEC_CTRL0F       0x3a0f
-#define OV5640_REG_AEC_CTRL10       0x3a10
-#define OV5640_REG_AEC_CTRL11       0x3a11
-#define OV5640_REG_AEC_CTRL1B       0x3a1b
-#define OV5640_REG_AEC_CTRL1E       0x3a1e
-#define OV5640_REG_AEC_CTRL1F       0x3a1f
-#define OV5640_REG_HZ5060_CTRL00    0x3c00
-#define OV5640_REG_HZ5060_CTRL01    0x3c01
-#define OV5640_REG_SIGMADELTA_CTRL0C    0x3c0c
-#define OV5640_REG_FRAME_CTRL01     0x4202
-#define OV5640_REG_FORMAT_CONTROL00 0x4300
-#define OV5640_REG_VFIFO_HSIZE      0x4602
-#define OV5640_REG_VFIFO_VSIZE      0x4604
-#define OV5640_REG_JPG_MODE_SELECT  0x4713
-#define OV5640_REG_CCIR656_CTRL00   0x4730
-#define OV5640_REG_POLARITY_CTRL00  0x4740
-#define OV5640_REG_MIPI_CTRL00      0x4800
-#define OV5640_REG_DEBUG_MODE       0x4814
-#define OV5640_REG_PCLK_PERIOD      0x4837
-#define OV5640_REG_ISP_FORMAT_MUX_CTRL  0x501f
-#define OV5640_REG_PRE_ISP_TEST_SET1    0x503d
-#define OV5640_REG_SDE_CTRL0        0x5580
-#define OV5640_REG_SDE_CTRL1        0x5581
-#define OV5640_REG_SDE_CTRL3        0x5583
-#define OV5640_REG_SDE_CTRL4        0x5584
-#define OV5640_REG_SDE_CTRL5        0x5585
-#define OV5640_REG_AVG_READOUT      0x56a1
+#define DSCAM6_REG_SYS_RESET02 0x3002
+#define DSCAM6_REG_SYS_CLOCK_ENABLE02 0x3006
+#define DSCAM6_REG_SYS_CTRL0 0x3008
+#define DSCAM6_REG_SYS_CTRL0_SW_PWDN 0x42
+#define DSCAM6_REG_SYS_CTRL0_SW_PWUP 0x02
+#define DSCAM6_REG_SYS_CTRL0_SW_RST 0x82
+#define DSCAM6_REG_CHIP_ID 0x300a
+#define DSCAM6_REG_IO_MIPI_CTRL00 0x300e
+#define DSCAM6_REG_PAD_OUTPUT_ENABLE01 0x3017
+#define DSCAM6_REG_PAD_OUTPUT_ENABLE02 0x3018
+#define DSCAM6_REG_PAD_OUTPUT00 0x3019
+#define DSCAM6_REG_SYSTEM_CONTROL1 0x302e
+#define DSCAM6_REG_SC_PLL_CTRL0 0x3034
+#define DSCAM6_REG_SC_PLL_CTRL1 0x3035
+#define DSCAM6_REG_SC_PLL_CTRL2 0x3036
+#define DSCAM6_REG_SC_PLL_CTRL3 0x3037
+#define DSCAM6_REG_SLAVE_ID 0x3100
+#define DSCAM6_REG_SCCB_SYS_CTRL1 0x3103
+#define DSCAM6_REG_SYS_ROOT_DIVIDER 0x3108
+#define DSCAM6_REG_AWB_R_GAIN 0x3400
+#define DSCAM6_REG_AWB_G_GAIN 0x3402
+#define DSCAM6_REG_AWB_B_GAIN 0x3404
+#define DSCAM6_REG_AWB_MANUAL_CTRL 0x3406
+#define DSCAM6_REG_AEC_PK_EXPOSURE_HI 0x3500
+#define DSCAM6_REG_AEC_PK_EXPOSURE_MED 0x3501
+#define DSCAM6_REG_AEC_PK_EXPOSURE_LO 0x3502
+#define DSCAM6_REG_AEC_PK_MANUAL 0x3503
+#define DSCAM6_REG_AEC_PK_REAL_GAIN 0x350a
+#define DSCAM6_REG_AEC_PK_VTS 0x350c
+#define DSCAM6_REG_TIMING_HS 0x3800
+#define DSCAM6_REG_TIMING_VS 0x3802
+#define DSCAM6_REG_TIMING_HW 0x3804
+#define DSCAM6_REG_TIMING_VH 0x3806
+#define DSCAM6_REG_TIMING_DVPHO 0x3808
+#define DSCAM6_REG_TIMING_DVPVO 0x380a
+#define DSCAM6_REG_TIMING_HTS 0x380c
+#define DSCAM6_REG_TIMING_VTS 0x380e
+#define DSCAM6_REG_TIMING_HOFFS 0x3810
+#define DSCAM6_REG_TIMING_VOFFS 0x3812
+#define DSCAM6_REG_TIMING_TC_REG20 0x3820
+#define DSCAM6_REG_TIMING_TC_REG21 0x3821
+#define DSCAM6_REG_AEC_CTRL00 0x3a00
+#define DSCAM6_REG_AEC_B50_STEP 0x3a08
+#define DSCAM6_REG_AEC_B60_STEP 0x3a0a
+#define DSCAM6_REG_AEC_CTRL0D 0x3a0d
+#define DSCAM6_REG_AEC_CTRL0E 0x3a0e
+#define DSCAM6_REG_AEC_CTRL0F 0x3a0f
+#define DSCAM6_REG_AEC_CTRL10 0x3a10
+#define DSCAM6_REG_AEC_CTRL11 0x3a11
+#define DSCAM6_REG_AEC_CTRL1B 0x3a1b
+#define DSCAM6_REG_AEC_CTRL1E 0x3a1e
+#define DSCAM6_REG_AEC_CTRL1F 0x3a1f
+#define DSCAM6_REG_HZ5060_CTRL00 0x3c00
+#define DSCAM6_REG_HZ5060_CTRL01 0x3c01
+#define DSCAM6_REG_SIGMADELTA_CTRL0C 0x3c0c
+#define DSCAM6_REG_FRAME_CTRL01 0x4202
+#define DSCAM6_REG_FORMAT_CONTROL00 0x4300
+#define DSCAM6_REG_VFIFO_HSIZE 0x4602
+#define DSCAM6_REG_VFIFO_VSIZE 0x4604
+#define DSCAM6_REG_JPG_MODE_SELECT 0x4713
+#define DSCAM6_REG_CCIR656_CTRL00 0x4730
+#define DSCAM6_REG_POLARITY_CTRL00 0x4740
+#define DSCAM6_REG_MIPI_CTRL00 0x4800
+#define DSCAM6_REG_DEBUG_MODE 0x4814
+#define DSCAM6_REG_PCLK_PERIOD 0x4837
+#define DSCAM6_REG_ISP_FORMAT_MUX_CTRL 0x501f
+#define DSCAM6_REG_PRE_ISP_TEST_SET1 0x503d
+#define DSCAM6_REG_SDE_CTRL0 0x5580
+#define DSCAM6_REG_SDE_CTRL1 0x5581
+#define DSCAM6_REG_SDE_CTRL3 0x5583
+#define DSCAM6_REG_SDE_CTRL4 0x5584
+#define DSCAM6_REG_SDE_CTRL5 0x5585
+#define DSCAM6_REG_AVG_READOUT 0x56a1
 
-enum ov5640_mode_id {
-    OV5640_MODE_VGA_640_480 = 0,
-    OV5640_MODE_XGA_1024_768,
-    OV5640_MODE_720P_1280_720,           // 768x1024 mode로 사용
-    OV5640_MODE_1080P_1920_1080,
-    OV5640_MODE_QSXGA_2592_1944,
-    OV5640_NUM_MODES,
+#endif
+
+enum dscam6_mode_id {
+    DSCAM6_MODE_VGA_640_480 = 0,
+    DSCAM6_MODE_XGA_1024_768,
+    DSCAM6_MODE_720P_1280_720, // 768x1024 mode로 사용
+    DSCAM6_MODE_1080P_1920_1080,
+    DSCAM6_MODE_QSXGA_2592_1944,
+    DSCAM6_NUM_MODES,
 };
 
-enum ov5640_frame_rate {
-    OV5640_15_FPS = 0,
-    OV5640_30_FPS,
-    OV5640_60_FPS,
-    OV5640_NUM_FRAMERATES,
+enum dscam6_frame_rate {
+    DSCAM6_15_FPS = 0,
+    DSCAM6_30_FPS,
+    DSCAM6_60_FPS,
+    DSCAM6_NUM_FRAMERATES,
 };
 
-enum ov5640_pixel_rate_id {
-    OV5640_PIXEL_RATE_168M,
-    OV5640_PIXEL_RATE_148M,
-    OV5640_PIXEL_RATE_124M,
-    OV5640_PIXEL_RATE_96M,
-    OV5640_PIXEL_RATE_48M,
-    OV5640_NUM_PIXEL_RATES,
+enum dscam6_pixel_rate_id {
+    DSCAM6_PIXEL_RATE_168M,
+    DSCAM6_PIXEL_RATE_148M,
+    DSCAM6_PIXEL_RATE_124M,
+    DSCAM6_PIXEL_RATE_96M,
+    DSCAM6_PIXEL_RATE_48M,
+    DSCAM6_NUM_PIXEL_RATES,
 };
 
 /*
@@ -149,12 +171,9 @@ enum ov5640_pixel_rate_id {
  * 192MHz exceeds the sysclk limits; use 168MHz as maximum pixel rate for
  * full resolution mode @15 FPS.
  */
-static const u32 ov5640_pixel_rates[] = {
-    [OV5640_PIXEL_RATE_168M] = 168000000,
-    [OV5640_PIXEL_RATE_148M] = 148000000,
-    [OV5640_PIXEL_RATE_124M] = 124000000,
-    [OV5640_PIXEL_RATE_96M] = 96000000,
-    [OV5640_PIXEL_RATE_48M] = 48000000,
+static const u32 dscam6_pixel_rates[] = {
+    [DSCAM6_PIXEL_RATE_168M] = 168000000, [DSCAM6_PIXEL_RATE_148M] = 148000000, [DSCAM6_PIXEL_RATE_124M] = 124000000,
+    [DSCAM6_PIXEL_RATE_96M] = 96000000,   [DSCAM6_PIXEL_RATE_48M] = 48000000,
 };
 
 /*
@@ -165,168 +184,178 @@ static const u32 ov5640_pixel_rates[] = {
  *
  * link_freq = (pixel_rate * bpp) / (2 * data_lanes)
  */
-static const s64 ov5640_csi2_link_freqs[] = {
-    992000000, 888000000, 768000000, 744000000, 672000000, 672000000,
-    592000000, 592000000, 576000000, 576000000, 496000000, 496000000,
-    384000000, 384000000, 384000000, 336000000, 296000000, 288000000,
-    248000000, 192000000, 192000000, 192000000, 96000000,
+static const s64 dscam6_csi2_link_freqs[] = {
+    992000000, 888000000, 768000000, 744000000, 672000000, 672000000, 592000000, 592000000, 576000000, 576000000, 496000000, 496000000,
+    384000000, 384000000, 384000000, 336000000, 296000000, 288000000, 248000000, 192000000, 192000000, 192000000, 96000000,
 };
 
 /* Link freq for default mode: UYVY 16 bpp, 2 data lanes. */
-#define OV5640_DEFAULT_LINK_FREQ    19
+#define DSCAM6_DEFAULT_LINK_FREQ 19
 
-enum ov5640_format_mux {
-    OV5640_FMT_MUX_YUV422 = 0,
-    OV5640_FMT_MUX_RGB,
-    OV5640_FMT_MUX_DITHER,
-    OV5640_FMT_MUX_RAW_DPC,
-    OV5640_FMT_MUX_SNR_RAW,
-    OV5640_FMT_MUX_RAW_CIP,
+enum dscam6_format_mux {
+    DSCAM6_FMT_MUX_YUV422 = 0,
+    DSCAM6_FMT_MUX_RGB,
+    DSCAM6_FMT_MUX_DITHER,
+    DSCAM6_FMT_MUX_RAW_DPC,
+    DSCAM6_FMT_MUX_SNR_RAW,
+    DSCAM6_FMT_MUX_RAW_CIP,
 };
 
-struct ov5640_pixfmt {
+struct dscam6_pixfmt {
     u32 code;
     u32 colorspace;
     u8 bpp;
     u8 ctrl00;
-    enum ov5640_format_mux mux;
+    enum dscam6_format_mux mux;
 };
 
-static const struct ov5640_pixfmt ov5640_dvp_formats[] = {
-    {
-        /* YUV422, YUYV */
-        .code       = MEDIA_BUS_FMT_JPEG_1X8,
-        .colorspace = V4L2_COLORSPACE_JPEG,
-        .bpp        = 16,
-        .ctrl00     = 0x30,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* YUV422, UYVY */
-        .code       = MEDIA_BUS_FMT_UYVY8_2X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x3f,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* YUV422, YUYV */
-        .code       = MEDIA_BUS_FMT_YUYV8_2X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x30,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* RGB565 {g[2:0],b[4:0]},{r[4:0],g[5:3]} */
-        .code       = MEDIA_BUS_FMT_RGB565_2X8_LE,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x6f,
-        .mux        = OV5640_FMT_MUX_RGB,
-    }, {
-        /* RGB565 {r[4:0],g[5:3]},{g[2:0],b[4:0]} */
-        .code       = MEDIA_BUS_FMT_RGB565_2X8_BE,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x61,
-        .mux        = OV5640_FMT_MUX_RGB,
-    }, {
-        /* Raw, BGBG... / GRGR... */
-        .code       = MEDIA_BUS_FMT_SBGGR8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x00,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, GBGB... / RGRG... */
-        .code       = MEDIA_BUS_FMT_SGBRG8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x01,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, GRGR... / BGBG... */
-        .code       = MEDIA_BUS_FMT_SGRBG8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x02,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, RGRG... / GBGB... */
-        .code       = MEDIA_BUS_FMT_SRGGB8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x03,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    },
-    { /* sentinel */ }
-};
+static const struct dscam6_pixfmt dscam6_dvp_formats[] = {{
+                                                              /* YUV422, YUYV */
+                                                              .code = MEDIA_BUS_FMT_JPEG_1X8,
+                                                              .colorspace = V4L2_COLORSPACE_JPEG,
+                                                              .bpp = 16,
+                                                              .ctrl00 = 0x30,
+                                                              .mux = DSCAM6_FMT_MUX_YUV422,
+                                                          },
+                                                          {
+                                                              /* YUV422, UYVY */
+                                                              .code = MEDIA_BUS_FMT_UYVY8_2X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 16,
+                                                              .ctrl00 = 0x3f,
+                                                              .mux = DSCAM6_FMT_MUX_YUV422,
+                                                          },
+                                                          {
+                                                              /* YUV422, YUYV */
+                                                              .code = MEDIA_BUS_FMT_YUYV8_2X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 16,
+                                                              .ctrl00 = 0x30,
+                                                              .mux = DSCAM6_FMT_MUX_YUV422,
+                                                          },
+                                                          {
+                                                              /* RGB565 {g[2:0],b[4:0]},{r[4:0],g[5:3]} */
+                                                              .code = MEDIA_BUS_FMT_RGB565_2X8_LE,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 16,
+                                                              .ctrl00 = 0x6f,
+                                                              .mux = DSCAM6_FMT_MUX_RGB,
+                                                          },
+                                                          {
+                                                              /* RGB565 {r[4:0],g[5:3]},{g[2:0],b[4:0]} */
+                                                              .code = MEDIA_BUS_FMT_RGB565_2X8_BE,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 16,
+                                                              .ctrl00 = 0x61,
+                                                              .mux = DSCAM6_FMT_MUX_RGB,
+                                                          },
+                                                          {
+                                                              /* Raw, BGBG... / GRGR... */
+                                                              .code = MEDIA_BUS_FMT_SBGGR8_1X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 8,
+                                                              .ctrl00 = 0x00,
+                                                              .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                          },
+                                                          {
+                                                              /* Raw bayer, GBGB... / RGRG... */
+                                                              .code = MEDIA_BUS_FMT_SGBRG8_1X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 8,
+                                                              .ctrl00 = 0x01,
+                                                              .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                          },
+                                                          {
+                                                              /* Raw bayer, GRGR... / BGBG... */
+                                                              .code = MEDIA_BUS_FMT_SGRBG8_1X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 8,
+                                                              .ctrl00 = 0x02,
+                                                              .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                          },
+                                                          {
+                                                              /* Raw bayer, RGRG... / GBGB... */
+                                                              .code = MEDIA_BUS_FMT_SRGGB8_1X8,
+                                                              .colorspace = V4L2_COLORSPACE_SRGB,
+                                                              .bpp = 8,
+                                                              .ctrl00 = 0x03,
+                                                              .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                          },
+                                                          {/* sentinel */}};
 
-static const struct ov5640_pixfmt ov5640_csi2_formats[] = {
-    {
-        /* YUV422, YUYV */
-        .code       = MEDIA_BUS_FMT_JPEG_1X8,
-        .colorspace = V4L2_COLORSPACE_JPEG,
-        .bpp        = 16,
-        .ctrl00     = 0x30,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* YUV422, UYVY */
-        .code       = MEDIA_BUS_FMT_UYVY8_1X16,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x3f,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* YUV422, YUYV */
-        .code       = MEDIA_BUS_FMT_YUYV8_1X16,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x30,
-        .mux        = OV5640_FMT_MUX_YUV422,
-    }, {
-        /* RGB565 {g[2:0],b[4:0]},{r[4:0],g[5:3]} */
-        .code       = MEDIA_BUS_FMT_RGB565_1X16,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 16,
-        .ctrl00     = 0x6f,
-        .mux        = OV5640_FMT_MUX_RGB,
-    }, {
-        /* BGR888: RGB */
-        .code       = MEDIA_BUS_FMT_BGR888_1X24,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 24,
-        .ctrl00     = 0x23,
-        .mux        = OV5640_FMT_MUX_RGB,
-    }, {
-        /* Raw, BGBG... / GRGR... */
-        .code       = MEDIA_BUS_FMT_SBGGR8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x00,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, GBGB... / RGRG... */
-        .code       = MEDIA_BUS_FMT_SGBRG8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x01,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, GRGR... / BGBG... */
-        .code       = MEDIA_BUS_FMT_SGRBG8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x02,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    }, {
-        /* Raw bayer, RGRG... / GBGB... */
-        .code       = MEDIA_BUS_FMT_SRGGB8_1X8,
-        .colorspace = V4L2_COLORSPACE_SRGB,
-        .bpp        = 8,
-        .ctrl00     = 0x03,
-        .mux        = OV5640_FMT_MUX_RAW_DPC,
-    },
-    { /* sentinel */ }
-};
+static const struct dscam6_pixfmt dscam6_csi2_formats[] = {{
+                                                               /* YUV422, YUYV */
+                                                               .code = MEDIA_BUS_FMT_JPEG_1X8,
+                                                               .colorspace = V4L2_COLORSPACE_JPEG,
+                                                               .bpp = 16,
+                                                               .ctrl00 = 0x30,
+                                                               .mux = DSCAM6_FMT_MUX_YUV422,
+                                                           },
+                                                           {
+                                                               /* YUV422, UYVY */
+                                                               .code = MEDIA_BUS_FMT_UYVY8_1X16,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 16,
+                                                               .ctrl00 = 0x3f,
+                                                               .mux = DSCAM6_FMT_MUX_YUV422,
+                                                           },
+                                                           {
+                                                               /* YUV422, YUYV */
+                                                               .code = MEDIA_BUS_FMT_YUYV8_1X16,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 16,
+                                                               .ctrl00 = 0x30,
+                                                               .mux = DSCAM6_FMT_MUX_YUV422,
+                                                           },
+                                                           {
+                                                               /* RGB565 {g[2:0],b[4:0]},{r[4:0],g[5:3]} */
+                                                               .code = MEDIA_BUS_FMT_RGB565_1X16,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 16,
+                                                               .ctrl00 = 0x6f,
+                                                               .mux = DSCAM6_FMT_MUX_RGB,
+                                                           },
+                                                           {
+                                                               /* BGR888: RGB */
+                                                               .code = MEDIA_BUS_FMT_BGR888_1X24,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 24,
+                                                               .ctrl00 = 0x23,
+                                                               .mux = DSCAM6_FMT_MUX_RGB,
+                                                           },
+                                                           {
+                                                               /* Raw, BGBG... / GRGR... */
+                                                               .code = MEDIA_BUS_FMT_SBGGR8_1X8,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 8,
+                                                               .ctrl00 = 0x00,
+                                                               .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                           },
+                                                           {
+                                                               /* Raw bayer, GBGB... / RGRG... */
+                                                               .code = MEDIA_BUS_FMT_SGBRG8_1X8,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 8,
+                                                               .ctrl00 = 0x01,
+                                                               .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                           },
+                                                           {
+                                                               /* Raw bayer, GRGR... / BGBG... */
+                                                               .code = MEDIA_BUS_FMT_SGRBG8_1X8,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 8,
+                                                               .ctrl00 = 0x02,
+                                                               .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                           },
+                                                           {
+                                                               /* Raw bayer, RGRG... / GBGB... */
+                                                               .code = MEDIA_BUS_FMT_SRGGB8_1X8,
+                                                               .colorspace = V4L2_COLORSPACE_SRGB,
+                                                               .bpp = 8,
+                                                               .ctrl00 = 0x03,
+                                                               .mux = DSCAM6_FMT_MUX_RAW_DPC,
+                                                           },
+                                                           {/* sentinel */}};
 
 /*
  * FIXME: remove this when a subdev API becomes available
@@ -334,29 +363,28 @@ static const struct ov5640_pixfmt ov5640_csi2_formats[] = {
  */
 static unsigned int virtual_channel;
 module_param(virtual_channel, uint, 0444);
-MODULE_PARM_DESC(virtual_channel,
-         "MIPI CSI-2 virtual channel (0..3), default 0");
+MODULE_PARM_DESC(virtual_channel, "MIPI CSI-2 virtual channel (0..3), default 0");
 
-static const int ov5640_framerates[] = {
-    [OV5640_15_FPS] = 15,
-    [OV5640_30_FPS] = 30,
-    [OV5640_60_FPS] = 60,
+static const int dscam6_framerates[] = {
+    [DSCAM6_15_FPS] = 15,
+    [DSCAM6_30_FPS] = 30,
+    [DSCAM6_60_FPS] = 60,
 };
 
 /* regulator supplies */
-static const char * const ov5640_supply_name[] = {
+static const char *const dscam6_supply_name[] = {
     "DOVDD", /* Digital I/O (1.8V) supply */
     "AVDD",  /* Analog (2.8V) supply */
     "DVDD",  /* Digital Core (1.5V) supply */
 };
 
-#define OV5640_NUM_SUPPLIES ARRAY_SIZE(ov5640_supply_name)
+#define DSCAM6_NUM_SUPPLIES ARRAY_SIZE(dscam6_supply_name)
 
 /*
  * Image size under 1280 * 960 are SUBSAMPLING
  * Image size upper 1280 * 960 are SCALING
  */
-enum ov5640_downsize_mode {
+enum dscam6_downsize_mode {
     SUBSAMPLING,
     SCALING,
 };
@@ -368,7 +396,7 @@ struct reg_value {
     u32 delay_ms;
 };
 
-struct ov5640_timings {
+struct dscam6_timings {
     /* Analog crop rectangle. */
     struct v4l2_rect analog_crop;
     /* Visibile crop: from analog crop top-left corner. */
@@ -379,16 +407,16 @@ struct ov5640_timings {
     u32 vblank_def;
 };
 
-struct ov5640_mode_info {
-    enum ov5640_mode_id id;
-    enum ov5640_downsize_mode dn_mode;
-    enum ov5640_pixel_rate_id pixel_rate;
+struct dscam6_mode_info {
+    enum dscam6_mode_id id;
+    enum dscam6_downsize_mode dn_mode;
+    enum dscam6_pixel_rate_id pixel_rate;
 
     unsigned int width;
     unsigned int height;
 
-    struct ov5640_timings dvp_timings;
-    struct ov5640_timings csi2_timings;
+    struct dscam6_timings dvp_timings;
+    struct dscam6_timings csi2_timings;
 
     const struct reg_value *reg_data;
     u32 reg_data_size;
@@ -398,47 +426,47 @@ struct ov5640_mode_info {
     u32 def_fps;
 };
 
-struct ov5640_ctrls {
+struct dscam6_ctrls {
     struct v4l2_ctrl_handler handler;
-    struct v4l2_ctrl *pixel_rate;
-    struct v4l2_ctrl *link_freq;
-    struct v4l2_ctrl *hblank;
-    struct v4l2_ctrl *vblank;
-    struct {
-        struct v4l2_ctrl *auto_exp;
-        struct v4l2_ctrl *exposure;
-    };
-    struct {
-        struct v4l2_ctrl *auto_wb;
-        struct v4l2_ctrl *blue_balance;
-        struct v4l2_ctrl *red_balance;
-    };
-    struct {
-        struct v4l2_ctrl *auto_gain;
-        struct v4l2_ctrl *gain;
-    };
-    struct v4l2_ctrl *brightness;
-    struct v4l2_ctrl *light_freq;
-    struct v4l2_ctrl *saturation;
-    struct v4l2_ctrl *contrast;
-    struct v4l2_ctrl *hue;
-    struct v4l2_ctrl *test_pattern;
-    struct v4l2_ctrl *hflip;
-    struct v4l2_ctrl *vflip;
+    // struct v4l2_ctrl *pixel_rate;
+    // struct v4l2_ctrl *link_freq;
+    // struct v4l2_ctrl *hblank;
+    // struct v4l2_ctrl *vblank;
+    // struct {
+    //     struct v4l2_ctrl *auto_exp;
+    //     struct v4l2_ctrl *exposure;
+    // };
+    // struct {
+    //     struct v4l2_ctrl *auto_wb;
+    //     struct v4l2_ctrl *blue_balance;
+    //     struct v4l2_ctrl *red_balance;
+    // };
+    // struct {
+    //     struct v4l2_ctrl *auto_gain;
+    //     struct v4l2_ctrl *gain;
+    // };
+    // struct v4l2_ctrl *brightness;
+    // struct v4l2_ctrl *light_freq;
+    // struct v4l2_ctrl *saturation;
+    // struct v4l2_ctrl *contrast;
+    // struct v4l2_ctrl *hue;
+    // struct v4l2_ctrl *test_pattern;
+    // struct v4l2_ctrl *hflip;
+    // struct v4l2_ctrl *vflip;
 };
 
-struct ov5640_dev {
+struct dscam6_dev {
     struct i2c_client *i2c_client;
     struct v4l2_subdev sd;
     struct media_pad pad;
     struct v4l2_fwnode_endpoint ep; /* the parsed DT endpoint info */
-    struct clk *xclk; /* system clock to OV5640 */
+    struct clk *xclk;               /* system clock to DSCAM6 */
     u32 xclk_freq;
 
-    struct regulator_bulk_data supplies[OV5640_NUM_SUPPLIES];
+    struct regulator_bulk_data supplies[DSCAM6_NUM_SUPPLIES];
     struct gpio_desc *reset_gpio;
     struct gpio_desc *pwdn_gpio;
-    bool   upside_down;
+    bool upside_down;
 
     /* lock to protect all members below */
     struct mutex lock;
@@ -448,14 +476,14 @@ struct ov5640_dev {
     struct v4l2_mbus_framefmt fmt;
     bool pending_fmt_change;
 
-    const struct ov5640_mode_info *current_mode;
-    const struct ov5640_mode_info *last_mode;
-    enum ov5640_frame_rate current_fr;
+    const struct dscam6_mode_info *current_mode;
+    const struct dscam6_mode_info *last_mode;
+    enum dscam6_frame_rate current_fr;
     struct v4l2_fract frame_interval;
     s64 current_link_freq;
     int current_link_freq_id;
 
-    struct ov5640_ctrls ctrls;
+    struct dscam6_ctrls ctrls;
 
     u32 prev_sysclk, prev_hts;
     u32 ae_low, ae_high, ae_target;
@@ -464,33 +492,18 @@ struct ov5640_dev {
     bool streaming;
 };
 
-static inline struct ov5640_dev *to_ov5640_dev(struct v4l2_subdev *sd)
-{
-    return container_of(sd, struct ov5640_dev, sd);
+static inline struct dscam6_dev *to_dscam6_dev(struct v4l2_subdev *sd) { return container_of(sd, struct dscam6_dev, sd); }
+
+static inline struct v4l2_subdev *ctrl_to_sd(struct v4l2_ctrl *ctrl) { return &container_of(ctrl->handler, struct dscam6_dev, ctrls.handler)->sd; }
+
+static inline bool dscam6_is_csi2(const struct dscam6_dev *sensor) { return sensor->ep.bus_type == V4L2_MBUS_CSI2_DPHY; }
+
+static inline const struct dscam6_pixfmt *dscam6_formats(struct dscam6_dev *sensor) {
+    return dscam6_is_csi2(sensor) ? dscam6_csi2_formats : dscam6_dvp_formats;
 }
 
-static inline struct v4l2_subdev *ctrl_to_sd(struct v4l2_ctrl *ctrl)
-{
-    return &container_of(ctrl->handler, struct ov5640_dev,
-                 ctrls.handler)->sd;
-}
-
-static inline bool ov5640_is_csi2(const struct ov5640_dev *sensor)
-{
-    return sensor->ep.bus_type == V4L2_MBUS_CSI2_DPHY;
-}
-
-static inline const struct ov5640_pixfmt *
-ov5640_formats(struct ov5640_dev *sensor)
-{
-    return ov5640_is_csi2(sensor) ? ov5640_csi2_formats
-                      : ov5640_dvp_formats;
-}
-
-static const struct ov5640_pixfmt *
-ov5640_code_to_pixfmt(struct ov5640_dev *sensor, u32 code)
-{
-    const struct ov5640_pixfmt *formats = ov5640_formats(sensor);
+static const struct dscam6_pixfmt *dscam6_code_to_pixfmt(struct dscam6_dev *sensor, u32 code) {
+    const struct dscam6_pixfmt *formats = dscam6_formats(sensor);
     unsigned int i;
 
     for (i = 0; formats[i].code; ++i) {
@@ -501,10 +514,8 @@ ov5640_code_to_pixfmt(struct ov5640_dev *sensor, u32 code)
     return &formats[0];
 }
 
-static u32 ov5640_code_to_bpp(struct ov5640_dev *sensor, u32 code)
-{
-    const struct ov5640_pixfmt *format = ov5640_code_to_pixfmt(sensor,
-                                   code);
+static u32 dscam6_code_to_bpp(struct dscam6_dev *sensor, u32 code) {
+    const struct dscam6_pixfmt *format = dscam6_code_to_pixfmt(sensor, code);
 
     return format->bpp;
 }
@@ -518,7 +529,7 @@ static u32 ov5640_code_to_bpp(struct ov5640_dev *sensor, u32 code)
  */
 /* YUV422 UYVY VGA@30fps */
 
-static const struct v4l2_mbus_framefmt ov5640_mipi_default_fmt = {
+static const struct v4l2_mbus_framefmt dscam6_mipi_default_fmt = {
     .code = MEDIA_BUS_FMT_UYVY8_1X16,
     .width = 640,
     .height = 480,
@@ -529,7 +540,7 @@ static const struct v4l2_mbus_framefmt ov5640_mipi_default_fmt = {
     .field = V4L2_FIELD_NONE,
 };
 
-static const struct v4l2_mbus_framefmt ov5640_dvp_default_fmt = {
+static const struct v4l2_mbus_framefmt dscam6_dvp_default_fmt = {
     .code = MEDIA_BUS_FMT_UYVY8_2X8,
     .width = 640,
     .height = 480,
@@ -540,411 +551,345 @@ static const struct v4l2_mbus_framefmt ov5640_dvp_default_fmt = {
     .field = V4L2_FIELD_NONE,
 };
 
-static const struct reg_value ov5640_init_setting[] = {
-    {0x3103, 0x11, 0, 0},
-    {0x3103, 0x03, 0, 0}, {0x3630, 0x36, 0, 0},
-    {0x3631, 0x0e, 0, 0}, {0x3632, 0xe2, 0, 0}, {0x3633, 0x12, 0, 0},
-    {0x3621, 0xe0, 0, 0}, {0x3704, 0xa0, 0, 0}, {0x3703, 0x5a, 0, 0},
-    {0x3715, 0x78, 0, 0}, {0x3717, 0x01, 0, 0}, {0x370b, 0x60, 0, 0},
-    {0x3705, 0x1a, 0, 0}, {0x3905, 0x02, 0, 0}, {0x3906, 0x10, 0, 0},
-    {0x3901, 0x0a, 0, 0}, {0x3731, 0x12, 0, 0}, {0x3600, 0x08, 0, 0},
-    {0x3601, 0x33, 0, 0}, {0x302d, 0x60, 0, 0}, {0x3620, 0x52, 0, 0},
-    {0x371b, 0x20, 0, 0}, {0x471c, 0x50, 0, 0}, {0x3a13, 0x43, 0, 0},
-    {0x3a18, 0x00, 0, 0}, {0x3a19, 0xf8, 0, 0}, {0x3635, 0x13, 0, 0},
-    {0x3636, 0x03, 0, 0}, {0x3634, 0x40, 0, 0}, {0x3622, 0x01, 0, 0},
-    {0x3c01, 0xa4, 0, 0}, {0x3c04, 0x28, 0, 0}, {0x3c05, 0x98, 0, 0},
-    {0x3c06, 0x00, 0, 0}, {0x3c07, 0x08, 0, 0}, {0x3c08, 0x00, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3820, 0x41, 0, 0}, {0x3821, 0x07, 0, 0}, {0x3814, 0x31, 0, 0},
-    {0x3815, 0x31, 0, 0},
-    {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0},
-    {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0}, {0x3a02, 0x03, 0, 0},
-    {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0},
-    {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0},
-    {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0},
-    {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0}, {0x3000, 0x00, 0, 0},
-    {0x3002, 0x1c, 0, 0}, {0x3004, 0xff, 0, 0}, {0x3006, 0xc3, 0, 0},
-    {0x302e, 0x08, 0, 0}, {0x4300, 0x3f, 0, 0},
-    {0x501f, 0x00, 0, 0}, {0x4407, 0x04, 0, 0},
-    {0x440e, 0x00, 0, 0}, {0x460b, 0x35, 0, 0}, {0x460c, 0x20, 0, 0},
-    {0x4837, 0x0a, 0, 0}, {0x3824, 0x02, 0, 0},
-    {0x5000, 0xa7, 0, 0}, {0x5001, 0xa3, 0, 0}, {0x5180, 0xff, 0, 0},
-    {0x5181, 0xf2, 0, 0}, {0x5182, 0x00, 0, 0}, {0x5183, 0x14, 0, 0},
-    {0x5184, 0x25, 0, 0}, {0x5185, 0x24, 0, 0}, {0x5186, 0x09, 0, 0},
-    {0x5187, 0x09, 0, 0}, {0x5188, 0x09, 0, 0}, {0x5189, 0x88, 0, 0},
-    {0x518a, 0x54, 0, 0}, {0x518b, 0xee, 0, 0}, {0x518c, 0xb2, 0, 0},
-    {0x518d, 0x50, 0, 0}, {0x518e, 0x34, 0, 0}, {0x518f, 0x6b, 0, 0},
-    {0x5190, 0x46, 0, 0}, {0x5191, 0xf8, 0, 0}, {0x5192, 0x04, 0, 0},
-    {0x5193, 0x70, 0, 0}, {0x5194, 0xf0, 0, 0}, {0x5195, 0xf0, 0, 0},
-    {0x5196, 0x03, 0, 0}, {0x5197, 0x01, 0, 0}, {0x5198, 0x04, 0, 0},
-    {0x5199, 0x6c, 0, 0}, {0x519a, 0x04, 0, 0}, {0x519b, 0x00, 0, 0},
-    {0x519c, 0x09, 0, 0}, {0x519d, 0x2b, 0, 0}, {0x519e, 0x38, 0, 0},
-    {0x5381, 0x1e, 0, 0}, {0x5382, 0x5b, 0, 0}, {0x5383, 0x08, 0, 0},
-    {0x5384, 0x0a, 0, 0}, {0x5385, 0x7e, 0, 0}, {0x5386, 0x88, 0, 0},
-    {0x5387, 0x7c, 0, 0}, {0x5388, 0x6c, 0, 0}, {0x5389, 0x10, 0, 0},
-    {0x538a, 0x01, 0, 0}, {0x538b, 0x98, 0, 0}, {0x5300, 0x08, 0, 0},
-    {0x5301, 0x30, 0, 0}, {0x5302, 0x10, 0, 0}, {0x5303, 0x00, 0, 0},
-    {0x5304, 0x08, 0, 0}, {0x5305, 0x30, 0, 0}, {0x5306, 0x08, 0, 0},
-    {0x5307, 0x16, 0, 0}, {0x5309, 0x08, 0, 0}, {0x530a, 0x30, 0, 0},
-    {0x530b, 0x04, 0, 0}, {0x530c, 0x06, 0, 0}, {0x5480, 0x01, 0, 0},
-    {0x5481, 0x08, 0, 0}, {0x5482, 0x14, 0, 0}, {0x5483, 0x28, 0, 0},
-    {0x5484, 0x51, 0, 0}, {0x5485, 0x65, 0, 0}, {0x5486, 0x71, 0, 0},
-    {0x5487, 0x7d, 0, 0}, {0x5488, 0x87, 0, 0}, {0x5489, 0x91, 0, 0},
-    {0x548a, 0x9a, 0, 0}, {0x548b, 0xaa, 0, 0}, {0x548c, 0xb8, 0, 0},
-    {0x548d, 0xcd, 0, 0}, {0x548e, 0xdd, 0, 0}, {0x548f, 0xea, 0, 0},
-    {0x5490, 0x1d, 0, 0}, {0x5580, 0x02, 0, 0}, {0x5583, 0x40, 0, 0},
-    {0x5584, 0x10, 0, 0}, {0x5589, 0x10, 0, 0}, {0x558a, 0x00, 0, 0},
-    {0x558b, 0xf8, 0, 0}, {0x5800, 0x23, 0, 0}, {0x5801, 0x14, 0, 0},
-    {0x5802, 0x0f, 0, 0}, {0x5803, 0x0f, 0, 0}, {0x5804, 0x12, 0, 0},
-    {0x5805, 0x26, 0, 0}, {0x5806, 0x0c, 0, 0}, {0x5807, 0x08, 0, 0},
-    {0x5808, 0x05, 0, 0}, {0x5809, 0x05, 0, 0}, {0x580a, 0x08, 0, 0},
-    {0x580b, 0x0d, 0, 0}, {0x580c, 0x08, 0, 0}, {0x580d, 0x03, 0, 0},
-    {0x580e, 0x00, 0, 0}, {0x580f, 0x00, 0, 0}, {0x5810, 0x03, 0, 0},
-    {0x5811, 0x09, 0, 0}, {0x5812, 0x07, 0, 0}, {0x5813, 0x03, 0, 0},
-    {0x5814, 0x00, 0, 0}, {0x5815, 0x01, 0, 0}, {0x5816, 0x03, 0, 0},
-    {0x5817, 0x08, 0, 0}, {0x5818, 0x0d, 0, 0}, {0x5819, 0x08, 0, 0},
-    {0x581a, 0x05, 0, 0}, {0x581b, 0x06, 0, 0}, {0x581c, 0x08, 0, 0},
-    {0x581d, 0x0e, 0, 0}, {0x581e, 0x29, 0, 0}, {0x581f, 0x17, 0, 0},
-    {0x5820, 0x11, 0, 0}, {0x5821, 0x11, 0, 0}, {0x5822, 0x15, 0, 0},
-    {0x5823, 0x28, 0, 0}, {0x5824, 0x46, 0, 0}, {0x5825, 0x26, 0, 0},
-    {0x5826, 0x08, 0, 0}, {0x5827, 0x26, 0, 0}, {0x5828, 0x64, 0, 0},
-    {0x5829, 0x26, 0, 0}, {0x582a, 0x24, 0, 0}, {0x582b, 0x22, 0, 0},
-    {0x582c, 0x24, 0, 0}, {0x582d, 0x24, 0, 0}, {0x582e, 0x06, 0, 0},
-    {0x582f, 0x22, 0, 0}, {0x5830, 0x40, 0, 0}, {0x5831, 0x42, 0, 0},
-    {0x5832, 0x24, 0, 0}, {0x5833, 0x26, 0, 0}, {0x5834, 0x24, 0, 0},
-    {0x5835, 0x22, 0, 0}, {0x5836, 0x22, 0, 0}, {0x5837, 0x26, 0, 0},
-    {0x5838, 0x44, 0, 0}, {0x5839, 0x24, 0, 0}, {0x583a, 0x26, 0, 0},
-    {0x583b, 0x28, 0, 0}, {0x583c, 0x42, 0, 0}, {0x583d, 0xce, 0, 0},
-    {0x5025, 0x00, 0, 0}, {0x3a0f, 0x30, 0, 0}, {0x3a10, 0x28, 0, 0},
-    {0x3a1b, 0x30, 0, 0}, {0x3a1e, 0x26, 0, 0}, {0x3a11, 0x60, 0, 0},
-    {0x3a1f, 0x14, 0, 0}, {0x3008, 0x42, 0, 0}, {0x3c00, 0x04, 0, 300},
-    {0x302c, 0xc2, 0, 0}
+static const struct reg_value dscam6_init_setting[] = {
+    {0x3103, 0x11, 0, 0}, {0x3103, 0x03, 0, 0}, {0x3630, 0x36, 0, 0}, {0x3631, 0x0e, 0, 0}, {0x3632, 0xe2, 0, 0}, {0x3633, 0x12, 0, 0},   {0x3621, 0xe0, 0, 0},
+    {0x3704, 0xa0, 0, 0}, {0x3703, 0x5a, 0, 0}, {0x3715, 0x78, 0, 0}, {0x3717, 0x01, 0, 0}, {0x370b, 0x60, 0, 0}, {0x3705, 0x1a, 0, 0},   {0x3905, 0x02, 0, 0},
+    {0x3906, 0x10, 0, 0}, {0x3901, 0x0a, 0, 0}, {0x3731, 0x12, 0, 0}, {0x3600, 0x08, 0, 0}, {0x3601, 0x33, 0, 0}, {0x302d, 0x60, 0, 0},   {0x3620, 0x52, 0, 0},
+    {0x371b, 0x20, 0, 0}, {0x471c, 0x50, 0, 0}, {0x3a13, 0x43, 0, 0}, {0x3a18, 0x00, 0, 0}, {0x3a19, 0xf8, 0, 0}, {0x3635, 0x13, 0, 0},   {0x3636, 0x03, 0, 0},
+    {0x3634, 0x40, 0, 0}, {0x3622, 0x01, 0, 0}, {0x3c01, 0xa4, 0, 0}, {0x3c04, 0x28, 0, 0}, {0x3c05, 0x98, 0, 0}, {0x3c06, 0x00, 0, 0},   {0x3c07, 0x08, 0, 0},
+    {0x3c08, 0x00, 0, 0}, {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0}, {0x3820, 0x41, 0, 0}, {0x3821, 0x07, 0, 0},   {0x3814, 0x31, 0, 0},
+    {0x3815, 0x31, 0, 0}, {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0}, {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0},   {0x3a02, 0x03, 0, 0},
+    {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0}, {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0},   {0x3a0d, 0x04, 0, 0},
+    {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0}, {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0}, {0x3000, 0x00, 0, 0}, {0x3002, 0x1c, 0, 0},   {0x3004, 0xff, 0, 0},
+    {0x3006, 0xc3, 0, 0}, {0x302e, 0x08, 0, 0}, {0x4300, 0x3f, 0, 0}, {0x501f, 0x00, 0, 0}, {0x4407, 0x04, 0, 0}, {0x440e, 0x00, 0, 0},   {0x460b, 0x35, 0, 0},
+    {0x460c, 0x20, 0, 0}, {0x4837, 0x0a, 0, 0}, {0x3824, 0x02, 0, 0}, {0x5000, 0xa7, 0, 0}, {0x5001, 0xa3, 0, 0}, {0x5180, 0xff, 0, 0},   {0x5181, 0xf2, 0, 0},
+    {0x5182, 0x00, 0, 0}, {0x5183, 0x14, 0, 0}, {0x5184, 0x25, 0, 0}, {0x5185, 0x24, 0, 0}, {0x5186, 0x09, 0, 0}, {0x5187, 0x09, 0, 0},   {0x5188, 0x09, 0, 0},
+    {0x5189, 0x88, 0, 0}, {0x518a, 0x54, 0, 0}, {0x518b, 0xee, 0, 0}, {0x518c, 0xb2, 0, 0}, {0x518d, 0x50, 0, 0}, {0x518e, 0x34, 0, 0},   {0x518f, 0x6b, 0, 0},
+    {0x5190, 0x46, 0, 0}, {0x5191, 0xf8, 0, 0}, {0x5192, 0x04, 0, 0}, {0x5193, 0x70, 0, 0}, {0x5194, 0xf0, 0, 0}, {0x5195, 0xf0, 0, 0},   {0x5196, 0x03, 0, 0},
+    {0x5197, 0x01, 0, 0}, {0x5198, 0x04, 0, 0}, {0x5199, 0x6c, 0, 0}, {0x519a, 0x04, 0, 0}, {0x519b, 0x00, 0, 0}, {0x519c, 0x09, 0, 0},   {0x519d, 0x2b, 0, 0},
+    {0x519e, 0x38, 0, 0}, {0x5381, 0x1e, 0, 0}, {0x5382, 0x5b, 0, 0}, {0x5383, 0x08, 0, 0}, {0x5384, 0x0a, 0, 0}, {0x5385, 0x7e, 0, 0},   {0x5386, 0x88, 0, 0},
+    {0x5387, 0x7c, 0, 0}, {0x5388, 0x6c, 0, 0}, {0x5389, 0x10, 0, 0}, {0x538a, 0x01, 0, 0}, {0x538b, 0x98, 0, 0}, {0x5300, 0x08, 0, 0},   {0x5301, 0x30, 0, 0},
+    {0x5302, 0x10, 0, 0}, {0x5303, 0x00, 0, 0}, {0x5304, 0x08, 0, 0}, {0x5305, 0x30, 0, 0}, {0x5306, 0x08, 0, 0}, {0x5307, 0x16, 0, 0},   {0x5309, 0x08, 0, 0},
+    {0x530a, 0x30, 0, 0}, {0x530b, 0x04, 0, 0}, {0x530c, 0x06, 0, 0}, {0x5480, 0x01, 0, 0}, {0x5481, 0x08, 0, 0}, {0x5482, 0x14, 0, 0},   {0x5483, 0x28, 0, 0},
+    {0x5484, 0x51, 0, 0}, {0x5485, 0x65, 0, 0}, {0x5486, 0x71, 0, 0}, {0x5487, 0x7d, 0, 0}, {0x5488, 0x87, 0, 0}, {0x5489, 0x91, 0, 0},   {0x548a, 0x9a, 0, 0},
+    {0x548b, 0xaa, 0, 0}, {0x548c, 0xb8, 0, 0}, {0x548d, 0xcd, 0, 0}, {0x548e, 0xdd, 0, 0}, {0x548f, 0xea, 0, 0}, {0x5490, 0x1d, 0, 0},   {0x5580, 0x02, 0, 0},
+    {0x5583, 0x40, 0, 0}, {0x5584, 0x10, 0, 0}, {0x5589, 0x10, 0, 0}, {0x558a, 0x00, 0, 0}, {0x558b, 0xf8, 0, 0}, {0x5800, 0x23, 0, 0},   {0x5801, 0x14, 0, 0},
+    {0x5802, 0x0f, 0, 0}, {0x5803, 0x0f, 0, 0}, {0x5804, 0x12, 0, 0}, {0x5805, 0x26, 0, 0}, {0x5806, 0x0c, 0, 0}, {0x5807, 0x08, 0, 0},   {0x5808, 0x05, 0, 0},
+    {0x5809, 0x05, 0, 0}, {0x580a, 0x08, 0, 0}, {0x580b, 0x0d, 0, 0}, {0x580c, 0x08, 0, 0}, {0x580d, 0x03, 0, 0}, {0x580e, 0x00, 0, 0},   {0x580f, 0x00, 0, 0},
+    {0x5810, 0x03, 0, 0}, {0x5811, 0x09, 0, 0}, {0x5812, 0x07, 0, 0}, {0x5813, 0x03, 0, 0}, {0x5814, 0x00, 0, 0}, {0x5815, 0x01, 0, 0},   {0x5816, 0x03, 0, 0},
+    {0x5817, 0x08, 0, 0}, {0x5818, 0x0d, 0, 0}, {0x5819, 0x08, 0, 0}, {0x581a, 0x05, 0, 0}, {0x581b, 0x06, 0, 0}, {0x581c, 0x08, 0, 0},   {0x581d, 0x0e, 0, 0},
+    {0x581e, 0x29, 0, 0}, {0x581f, 0x17, 0, 0}, {0x5820, 0x11, 0, 0}, {0x5821, 0x11, 0, 0}, {0x5822, 0x15, 0, 0}, {0x5823, 0x28, 0, 0},   {0x5824, 0x46, 0, 0},
+    {0x5825, 0x26, 0, 0}, {0x5826, 0x08, 0, 0}, {0x5827, 0x26, 0, 0}, {0x5828, 0x64, 0, 0}, {0x5829, 0x26, 0, 0}, {0x582a, 0x24, 0, 0},   {0x582b, 0x22, 0, 0},
+    {0x582c, 0x24, 0, 0}, {0x582d, 0x24, 0, 0}, {0x582e, 0x06, 0, 0}, {0x582f, 0x22, 0, 0}, {0x5830, 0x40, 0, 0}, {0x5831, 0x42, 0, 0},   {0x5832, 0x24, 0, 0},
+    {0x5833, 0x26, 0, 0}, {0x5834, 0x24, 0, 0}, {0x5835, 0x22, 0, 0}, {0x5836, 0x22, 0, 0}, {0x5837, 0x26, 0, 0}, {0x5838, 0x44, 0, 0},   {0x5839, 0x24, 0, 0},
+    {0x583a, 0x26, 0, 0}, {0x583b, 0x28, 0, 0}, {0x583c, 0x42, 0, 0}, {0x583d, 0xce, 0, 0}, {0x5025, 0x00, 0, 0}, {0x3a0f, 0x30, 0, 0},   {0x3a10, 0x28, 0, 0},
+    {0x3a1b, 0x30, 0, 0}, {0x3a1e, 0x26, 0, 0}, {0x3a11, 0x60, 0, 0}, {0x3a1f, 0x14, 0, 0}, {0x3008, 0x42, 0, 0}, {0x3c00, 0x04, 0, 300}, {0x302c, 0xc2, 0, 0}};
+
+static const struct reg_value dscam6_setting_low_res[] = {
+    {0x3008, 0x42, 0, 0}, {0x3c07, 0x08, 0, 0}, {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0}, {0x3814, 0x31, 0, 0}, {0x3815, 0x31, 0, 0},
+    {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0}, {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0}, {0x3a02, 0x03, 0, 0}, {0x3a03, 0xd8, 0, 0},
+    {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0}, {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0}, {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0},
+    {0x3a15, 0xd8, 0, 0}, {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0}, {0x3824, 0x02, 0, 0}, {0x4407, 0x04, 0, 0}, {0x5001, 0xa3, 0, 0}, {0x3008, 0x02, 0, 15},
 };
 
-static const struct reg_value ov5640_setting_low_res[] = {
-    {0x3008, 0x42, 0, 0},
-    {0x3c07, 0x08, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3814, 0x31, 0, 0},
-    {0x3815, 0x31, 0, 0},
-    {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0},
-    {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0}, {0x3a02, 0x03, 0, 0},
-    {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0},
-    {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0},
-    {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0},
-    {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0}, {0x3824, 0x02, 0, 0},
-    {0x4407, 0x04, 0, 0}, {0x5001, 0xa3, 0, 0},
-    {0x3008, 0x02, 0, 15},
+static const struct reg_value dscam6_setting_720P_1280_720[] = {
+    {0x3008, 0x42, 0, 0}, {0x3c07, 0x07, 0, 0}, {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0}, {0x3814, 0x31, 0, 0},
+    {0x3815, 0x31, 0, 0}, {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0}, {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0},
+    {0x3a02, 0x02, 0, 0}, {0x3a03, 0xe4, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0xbc, 0, 0}, {0x3a0a, 0x01, 0, 0}, {0x3a0b, 0x72, 0, 0},
+    {0x3a0e, 0x01, 0, 0}, {0x3a0d, 0x02, 0, 0}, {0x3a14, 0x02, 0, 0}, {0x3a15, 0xe4, 0, 0}, {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0},
+    {0x4407, 0x04, 0, 0}, {0x460b, 0x37, 0, 0}, {0x460c, 0x20, 0, 0}, {0x3824, 0x04, 0, 0}, {0x5001, 0x83, 0, 0}, {0x3008, 0x02, 0, 15},
 };
 
-static const struct reg_value ov5640_setting_720P_1280_720[] = {
-    {0x3008, 0x42, 0, 0},
-    {0x3c07, 0x07, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3814, 0x31, 0, 0},
-    {0x3815, 0x31, 0, 0},
-    {0x3618, 0x00, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x64, 0, 0},
-    {0x3709, 0x52, 0, 0}, {0x370c, 0x03, 0, 0}, {0x3a02, 0x02, 0, 0},
-    {0x3a03, 0xe4, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0xbc, 0, 0},
-    {0x3a0a, 0x01, 0, 0}, {0x3a0b, 0x72, 0, 0}, {0x3a0e, 0x01, 0, 0},
-    {0x3a0d, 0x02, 0, 0}, {0x3a14, 0x02, 0, 0}, {0x3a15, 0xe4, 0, 0},
-    {0x4001, 0x02, 0, 0}, {0x4004, 0x02, 0, 0},
-    {0x4407, 0x04, 0, 0}, {0x460b, 0x37, 0, 0}, {0x460c, 0x20, 0, 0},
-    {0x3824, 0x04, 0, 0}, {0x5001, 0x83, 0, 0},
-    {0x3008, 0x02, 0, 15},
+static const struct reg_value dscam6_setting_1080P_1920_1080[] = {
+    {0x3008, 0x42, 0, 0}, {0x3c07, 0x08, 0, 0}, {0x3c09, 0x1c, 0, 0},  {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0}, {0x3814, 0x11, 0, 0}, {0x3815, 0x11, 0, 0},
+    {0x3618, 0x04, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x21, 0, 0},  {0x3709, 0x12, 0, 0}, {0x370c, 0x00, 0, 0}, {0x3a02, 0x03, 0, 0}, {0x3a03, 0xd8, 0, 0},
+    {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0}, {0x3a0a, 0x00, 0, 0},  {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0}, {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0},
+    {0x3a15, 0xd8, 0, 0}, {0x4001, 0x02, 0, 0}, {0x4004, 0x06, 0, 0},  {0x4407, 0x04, 0, 0}, {0x460b, 0x35, 0, 0}, {0x460c, 0x22, 0, 0}, {0x3824, 0x02, 0, 0},
+    {0x5001, 0x83, 0, 0}, {0x3c07, 0x07, 0, 0}, {0x3c08, 0x00, 0, 0},  {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0}, {0x3612, 0x2b, 0, 0},
+    {0x3708, 0x64, 0, 0}, {0x3a02, 0x04, 0, 0}, {0x3a03, 0x60, 0, 0},  {0x3a08, 0x01, 0, 0}, {0x3a09, 0x50, 0, 0}, {0x3a0a, 0x01, 0, 0}, {0x3a0b, 0x18, 0, 0},
+    {0x3a0e, 0x03, 0, 0}, {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x04, 0, 0},  {0x3a15, 0x60, 0, 0}, {0x4407, 0x04, 0, 0}, {0x460b, 0x37, 0, 0}, {0x460c, 0x20, 0, 0},
+    {0x3824, 0x02, 0, 0}, {0x4005, 0x1a, 0, 0}, {0x3008, 0x02, 0, 15},
 };
 
-static const struct reg_value ov5640_setting_1080P_1920_1080[] = {
-    {0x3008, 0x42, 0, 0},
-    {0x3c07, 0x08, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3814, 0x11, 0, 0},
-    {0x3815, 0x11, 0, 0},
-    {0x3618, 0x04, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x21, 0, 0},
-    {0x3709, 0x12, 0, 0}, {0x370c, 0x00, 0, 0}, {0x3a02, 0x03, 0, 0},
-    {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0},
-    {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0},
-    {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0},
-    {0x4001, 0x02, 0, 0}, {0x4004, 0x06, 0, 0},
-    {0x4407, 0x04, 0, 0}, {0x460b, 0x35, 0, 0}, {0x460c, 0x22, 0, 0},
-    {0x3824, 0x02, 0, 0}, {0x5001, 0x83, 0, 0},
-    {0x3c07, 0x07, 0, 0}, {0x3c08, 0x00, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3612, 0x2b, 0, 0}, {0x3708, 0x64, 0, 0},
-    {0x3a02, 0x04, 0, 0}, {0x3a03, 0x60, 0, 0}, {0x3a08, 0x01, 0, 0},
-    {0x3a09, 0x50, 0, 0}, {0x3a0a, 0x01, 0, 0}, {0x3a0b, 0x18, 0, 0},
-    {0x3a0e, 0x03, 0, 0}, {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x04, 0, 0},
-    {0x3a15, 0x60, 0, 0}, {0x4407, 0x04, 0, 0},
-    {0x460b, 0x37, 0, 0}, {0x460c, 0x20, 0, 0}, {0x3824, 0x02, 0, 0},
-    {0x4005, 0x1a, 0, 0}, {0x3008, 0x02, 0, 15},
+static const struct reg_value dscam6_setting_QSXGA_2592_1944[] = {
+    {0x3008, 0x42, 0, 0}, {0x3c07, 0x08, 0, 0}, {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},  {0x3814, 0x11, 0, 0},
+    {0x3815, 0x11, 0, 0}, {0x3618, 0x04, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x21, 0, 0}, {0x3709, 0x12, 0, 0},  {0x370c, 0x00, 0, 0},
+    {0x3a02, 0x03, 0, 0}, {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0}, {0x3a0a, 0x00, 0, 0},  {0x3a0b, 0xf6, 0, 0},
+    {0x3a0e, 0x03, 0, 0}, {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0}, {0x4001, 0x02, 0, 0},  {0x4004, 0x06, 0, 0},
+    {0x4407, 0x04, 0, 0}, {0x460b, 0x35, 0, 0}, {0x460c, 0x20, 0, 0}, {0x3824, 0x02, 0, 0}, {0x5001, 0x83, 0, 70}, {0x3008, 0x02, 0, 20},
 };
 
-static const struct reg_value ov5640_setting_QSXGA_2592_1944[] = {
-    {0x3008, 0x42, 0, 0},
-    {0x3c07, 0x08, 0, 0},
-    {0x3c09, 0x1c, 0, 0}, {0x3c0a, 0x9c, 0, 0}, {0x3c0b, 0x40, 0, 0},
-    {0x3814, 0x11, 0, 0},
-    {0x3815, 0x11, 0, 0},
-    {0x3618, 0x04, 0, 0}, {0x3612, 0x29, 0, 0}, {0x3708, 0x21, 0, 0},
-    {0x3709, 0x12, 0, 0}, {0x370c, 0x00, 0, 0}, {0x3a02, 0x03, 0, 0},
-    {0x3a03, 0xd8, 0, 0}, {0x3a08, 0x01, 0, 0}, {0x3a09, 0x27, 0, 0},
-    {0x3a0a, 0x00, 0, 0}, {0x3a0b, 0xf6, 0, 0}, {0x3a0e, 0x03, 0, 0},
-    {0x3a0d, 0x04, 0, 0}, {0x3a14, 0x03, 0, 0}, {0x3a15, 0xd8, 0, 0},
-    {0x4001, 0x02, 0, 0}, {0x4004, 0x06, 0, 0},
-    {0x4407, 0x04, 0, 0}, {0x460b, 0x35, 0, 0}, {0x460c, 0x20, 0, 0},
-    {0x3824, 0x02, 0, 0}, {0x5001, 0x83, 0, 70},
-    {0x3008, 0x02, 0, 20},
+static const struct dscam6_mode_info dscam6_mode_data[DSCAM6_NUM_MODES] = {
+    {/* 640x480 */
+     .id = DSCAM6_MODE_VGA_640_480,
+     .dn_mode = SUBSAMPLING,
+     .pixel_rate = DSCAM6_PIXEL_RATE_48M,
+     .width = 640,
+     .height = 480,
+     .dvp_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 4,
+                     .width = 2624,
+                     .height = 1944,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 6,
+                     .width = 640,
+                     .height = 480,
+                 },
+             .htot = 1896,
+             .vblank_def = 600,
+         },
+     .csi2_timings =
+         {
+             /* Feed the full valid pixel array to the ISP. */
+             .analog_crop =
+                 {
+                     .left = DSCAM6_PIXEL_ARRAY_LEFT,
+                     .top = DSCAM6_PIXEL_ARRAY_TOP,
+                     .width = DSCAM6_PIXEL_ARRAY_WIDTH,
+                     .height = DSCAM6_PIXEL_ARRAY_HEIGHT,
+                 },
+             /* Maintain a minimum processing margin. */
+             .crop =
+                 {
+                     .left = 2,
+                     .top = 4,
+                     .width = 640,
+                     .height = 480,
+                 },
+             .htot = 1600,
+             .vblank_def = 520,
+         },
+     .reg_data = dscam6_setting_low_res,
+     .reg_data_size = ARRAY_SIZE(dscam6_setting_low_res),
+     .max_fps = DSCAM6_30_FPS,
+     .def_fps = DSCAM6_30_FPS},
+    {/* 1024x768 */
+     .id = DSCAM6_MODE_XGA_1024_768,
+     .dn_mode = SUBSAMPLING,
+     .pixel_rate = DSCAM6_PIXEL_RATE_96M,
+     .width = 1024,
+     .height = 768,
+     .dvp_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 4,
+                     .width = 2624,
+                     .height = 1944,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 6,
+                     .width = 1024,
+                     .height = 768,
+                 },
+             .htot = 1896,
+             .vblank_def = 312,
+         },
+     .csi2_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 4,
+                     .width = DSCAM6_NATIVE_WIDTH,
+                     .height = DSCAM6_PIXEL_ARRAY_HEIGHT,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 6,
+                     .width = 1024,
+                     .height = 768,
+                 },
+             .htot = 1896,
+             .vblank_def = 918,
+         },
+     .reg_data = dscam6_setting_low_res,
+     .reg_data_size = ARRAY_SIZE(dscam6_setting_low_res),
+     .max_fps = DSCAM6_30_FPS,
+     .def_fps = DSCAM6_30_FPS},
+    {// 768x1024로 변경한다.
+     .id = DSCAM6_MODE_720P_1280_720,
+     .dn_mode = SUBSAMPLING,
+     .pixel_rate = DSCAM6_PIXEL_RATE_96M,
+     .width = 768,
+     .height = 1024,
+     .dvp_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 250,
+                     .width = 2624,
+                     .height = 1456,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 768,
+                     .height = 1024,
+                 },
+             .htot = 1892,
+             .vblank_def = 20,
+         },
+     .csi2_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 250,
+                     .width = 2624,
+                     .height = 1456,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 768,
+                     .height = 1024,
+                 },
+             .htot = 1600,
+             .vblank_def = 560,
+         },
+     .reg_data = dscam6_setting_720P_1280_720,
+     .reg_data_size = ARRAY_SIZE(dscam6_setting_720P_1280_720),
+     .max_fps = DSCAM6_30_FPS,
+     .def_fps = DSCAM6_30_FPS},
+    {/* 1920x1080 */
+     .id = DSCAM6_MODE_1080P_1920_1080,
+     .dn_mode = SCALING,
+     .pixel_rate = DSCAM6_PIXEL_RATE_148M,
+     .width = 1920,
+     .height = 1080,
+     .dvp_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 336,
+                     .top = 434,
+                     .width = 1952,
+                     .height = 1088,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 1920,
+                     .height = 1080,
+                 },
+             .htot = 2500,
+             .vblank_def = 40,
+         },
+     .csi2_timings =
+         {
+             /* Crop the full valid pixel array in the center. */
+             .analog_crop =
+                 {
+                     .left = 336,
+                     .top = 434,
+                     .width = 1952,
+                     .height = 1088,
+                 },
+             /* Maintain a larger processing margins. */
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 1920,
+                     .height = 1080,
+                 },
+             .htot = 2234,
+             .vblank_def = 24,
+         },
+     .reg_data = dscam6_setting_1080P_1920_1080,
+     .reg_data_size = ARRAY_SIZE(dscam6_setting_1080P_1920_1080),
+     .max_fps = DSCAM6_30_FPS,
+     .def_fps = DSCAM6_30_FPS},
+    {/* 2592x1944 */
+     .id = DSCAM6_MODE_QSXGA_2592_1944,
+     .dn_mode = SCALING,
+     .pixel_rate = DSCAM6_PIXEL_RATE_168M,
+     .width = DSCAM6_PIXEL_ARRAY_WIDTH,
+     .height = DSCAM6_PIXEL_ARRAY_HEIGHT,
+     .dvp_timings =
+         {
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 0,
+                     .width = 2624,
+                     .height = 1952,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 2592,
+                     .height = 1944,
+                 },
+             .htot = 2844,
+             .vblank_def = 24,
+         },
+     .csi2_timings =
+         {
+             /* Give more processing margin to full resolution. */
+             .analog_crop =
+                 {
+                     .left = 0,
+                     .top = 0,
+                     .width = DSCAM6_NATIVE_WIDTH,
+                     .height = 1952,
+                 },
+             .crop =
+                 {
+                     .left = 16,
+                     .top = 4,
+                     .width = 2592,
+                     .height = 1944,
+                 },
+             .htot = 2844,
+             .vblank_def = 24,
+         },
+     .reg_data = dscam6_setting_QSXGA_2592_1944,
+     .reg_data_size = ARRAY_SIZE(dscam6_setting_QSXGA_2592_1944),
+     .max_fps = DSCAM6_15_FPS,
+     .def_fps = DSCAM6_15_FPS},
 };
 
-static const struct ov5640_mode_info ov5640_mode_data[OV5640_NUM_MODES] = {
-    {
-        /* 640x480 */
-        .id     = OV5640_MODE_VGA_640_480,
-        .dn_mode    = SUBSAMPLING,
-        .pixel_rate = OV5640_PIXEL_RATE_48M,
-        .width      = 640,
-        .height     = 480,
-        .dvp_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 4,
-                .width  = 2624,
-                .height = 1944,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 6,
-                .width  = 640,
-                .height = 480,
-            },
-            .htot       = 1896,
-            .vblank_def = 600,
-        },
-        .csi2_timings = {
-            /* Feed the full valid pixel array to the ISP. */
-            .analog_crop = {
-                .left   = OV5640_PIXEL_ARRAY_LEFT,
-                .top    = OV5640_PIXEL_ARRAY_TOP,
-                .width  = OV5640_PIXEL_ARRAY_WIDTH,
-                .height = OV5640_PIXEL_ARRAY_HEIGHT,
-            },
-            /* Maintain a minimum processing margin. */
-            .crop = {
-                .left   = 2,
-                .top    = 4,
-                .width  = 640,
-                .height = 480,
-            },
-            .htot       = 1600,
-            .vblank_def = 520,
-        },
-        .reg_data   = ov5640_setting_low_res,
-        .reg_data_size  = ARRAY_SIZE(ov5640_setting_low_res),
-        .max_fps    = OV5640_30_FPS,
-        .def_fps    = OV5640_30_FPS
-    }, {
-        /* 1024x768 */
-        .id     = OV5640_MODE_XGA_1024_768,
-        .dn_mode    = SUBSAMPLING,
-        .pixel_rate = OV5640_PIXEL_RATE_96M,
-        .width      = 1024,
-        .height     = 768,
-        .dvp_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 4,
-                .width  = 2624,
-                .height = 1944,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 6,
-                .width  = 1024,
-                .height = 768,
-            },
-            .htot       = 1896,
-            .vblank_def = 312,
-        },
-        .csi2_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 4,
-                .width  = OV5640_NATIVE_WIDTH,
-                .height = OV5640_PIXEL_ARRAY_HEIGHT,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 6,
-                .width  = 1024,
-                .height = 768,
-            },
-            .htot       = 1896,
-            .vblank_def = 918,
-        },
-        .reg_data   = ov5640_setting_low_res,
-        .reg_data_size  = ARRAY_SIZE(ov5640_setting_low_res),
-        .max_fps    = OV5640_30_FPS,
-        .def_fps    = OV5640_30_FPS
-    }, {
-        // 768x1024로 변경한다.
-        .id     = OV5640_MODE_720P_1280_720,
-        .dn_mode    = SUBSAMPLING,
-        .pixel_rate = OV5640_PIXEL_RATE_96M,
-        .width      = 768,
-        .height     = 1024,
-        .dvp_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 250,
-                .width  = 2624,
-                .height = 1456,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 768,
-                .height = 1024,
-            },
-            .htot       = 1892,
-            .vblank_def = 20,
-        },
-        .csi2_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 250,
-                .width  = 2624,
-                .height = 1456,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 768,
-                .height = 1024,
-            },
-            .htot       = 1600,
-            .vblank_def = 560,
-        },
-        .reg_data   = ov5640_setting_720P_1280_720,
-        .reg_data_size  = ARRAY_SIZE(ov5640_setting_720P_1280_720),
-        .max_fps    = OV5640_30_FPS,
-        .def_fps    = OV5640_30_FPS
-    }, {
-        /* 1920x1080 */
-        .id     = OV5640_MODE_1080P_1920_1080,
-        .dn_mode    = SCALING,
-        .pixel_rate = OV5640_PIXEL_RATE_148M,
-        .width      = 1920,
-        .height     = 1080,
-        .dvp_timings = {
-            .analog_crop = {
-                .left   = 336,
-                .top    = 434,
-                .width  = 1952,
-                .height = 1088,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 1920,
-                .height = 1080,
-            },
-            .htot       = 2500,
-            .vblank_def = 40,
-        },
-        .csi2_timings = {
-            /* Crop the full valid pixel array in the center. */
-            .analog_crop = {
-                .left   = 336,
-                .top    = 434,
-                .width  = 1952,
-                .height = 1088,
-            },
-            /* Maintain a larger processing margins. */
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 1920,
-                .height = 1080,
-            },
-            .htot       = 2234,
-            .vblank_def = 24,
-        },
-        .reg_data   = ov5640_setting_1080P_1920_1080,
-        .reg_data_size  = ARRAY_SIZE(ov5640_setting_1080P_1920_1080),
-        .max_fps    = OV5640_30_FPS,
-        .def_fps    = OV5640_30_FPS
-    }, {
-        /* 2592x1944 */
-        .id     = OV5640_MODE_QSXGA_2592_1944,
-        .dn_mode    = SCALING,
-        .pixel_rate = OV5640_PIXEL_RATE_168M,
-        .width      = OV5640_PIXEL_ARRAY_WIDTH,
-        .height     = OV5640_PIXEL_ARRAY_HEIGHT,
-        .dvp_timings = {
-            .analog_crop = {
-                .left   = 0,
-                .top    = 0,
-                .width  = 2624,
-                .height = 1952,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 2592,
-                .height = 1944,
-            },
-            .htot       = 2844,
-            .vblank_def = 24,
-        },
-        .csi2_timings = {
-            /* Give more processing margin to full resolution. */
-            .analog_crop = {
-                .left   = 0,
-                .top    = 0,
-                .width  = OV5640_NATIVE_WIDTH,
-                .height = 1952,
-            },
-            .crop = {
-                .left   = 16,
-                .top    = 4,
-                .width  = 2592,
-                .height = 1944,
-            },
-            .htot       = 2844,
-            .vblank_def = 24,
-        },
-        .reg_data   = ov5640_setting_QSXGA_2592_1944,
-        .reg_data_size  = ARRAY_SIZE(ov5640_setting_QSXGA_2592_1944),
-        .max_fps    = OV5640_15_FPS,
-        .def_fps    = OV5640_15_FPS
-    },
-};
-
-static const struct ov5640_timings *
-ov5640_timings(const struct ov5640_dev *sensor,
-           const struct ov5640_mode_info *mode)
-{
-    if (ov5640_is_csi2(sensor))
+static const struct dscam6_timings *dscam6_timings(const struct dscam6_dev *sensor, const struct dscam6_mode_info *mode) {
+    if (dscam6_is_csi2(sensor))
         return &mode->csi2_timings;
 
     return &mode->dvp_timings;
 }
 
-static int ov5640_init_slave_id(struct ov5640_dev *sensor)
-{
+static int dscam6_init_slave_id(struct dscam6_dev *sensor) {
+    return 0;
+#if 0
     struct i2c_client *client = sensor->i2c_client;
     struct i2c_msg msg;
     u8 buf[3];
     int ret;
 
-    if (client->addr == OV5640_DEFAULT_SLAVE_ID)
+    if (client->addr == DSCAM6_DEFAULT_SLAVE_ID)
         return 0;
 
-    buf[0] = OV5640_REG_SLAVE_ID >> 8;
-    buf[1] = OV5640_REG_SLAVE_ID & 0xff;
+    buf[0] = DSCAM6_REG_SLAVE_ID >> 8;
+    buf[1] = DSCAM6_REG_SLAVE_ID & 0xff;
     buf[2] = client->addr << 1;
 
-    msg.addr = OV5640_DEFAULT_SLAVE_ID;
+    msg.addr = DSCAM6_DEFAULT_SLAVE_ID;
     msg.flags = 0;
     msg.buf = buf;
     msg.len = sizeof(buf);
@@ -957,10 +902,12 @@ static int ov5640_init_slave_id(struct ov5640_dev *sensor)
     // }
 
     return 0;
+#endif
 }
 
-static int ov5640_write_reg(struct ov5640_dev *sensor, u16 reg, u8 val)
-{
+static int dscam6_write_reg(struct dscam6_dev *sensor, u16 reg, u8 val) {
+    return 0;
+#if 0 
     struct i2c_client *client = sensor->i2c_client;
     struct i2c_msg msg;
     u8 buf[3];
@@ -984,10 +931,12 @@ static int ov5640_write_reg(struct ov5640_dev *sensor, u16 reg, u8 val)
     //}
 
     return 0;
+#endif
 }
 
-static int ov5640_read_reg(struct ov5640_dev *sensor, u16 reg, u8 *val)
-{
+static int dscam6_read_reg(struct dscam6_dev *sensor, u16 reg, u8 *val) {
+    return 0;
+#if 0 
     struct i2c_client *client = sensor->i2c_client;
     struct i2c_msg msg[2];
     u8 buf[2];
@@ -1016,42 +965,47 @@ static int ov5640_read_reg(struct ov5640_dev *sensor, u16 reg, u8 *val)
 
     *val = buf[0];
     return 0;
+#endif
 }
 
-static int ov5640_read_reg16(struct ov5640_dev *sensor, u16 reg, u16 *val)
-{
+static int dscam6_read_reg16(struct dscam6_dev *sensor, u16 reg, u16 *val) {
+    return 0;
+#if 0 
     u8 hi, lo;
     int ret;
 
-    ret = ov5640_read_reg(sensor, reg, &hi);
+    ret = dscam6_read_reg(sensor, reg, &hi);
     if (ret)
         return ret;
-    ret = ov5640_read_reg(sensor, reg + 1, &lo);
+    ret = dscam6_read_reg(sensor, reg + 1, &lo);
     if (ret)
         return ret;
 
     *val = ((u16)hi << 8) | (u16)lo;
     return 0;
+#endif
 }
 
-static int ov5640_write_reg16(struct ov5640_dev *sensor, u16 reg, u16 val)
-{
+static int dscam6_write_reg16(struct dscam6_dev *sensor, u16 reg, u16 val) {
+    return 0;
+#if 0 
     int ret;
 
-    ret = ov5640_write_reg(sensor, reg, val >> 8);
+    ret = dscam6_write_reg(sensor, reg, val >> 8);
     if (ret)
         return ret;
 
-    return ov5640_write_reg(sensor, reg + 1, val & 0xff);
+    return dscam6_write_reg(sensor, reg + 1, val & 0xff);
+#endif
 }
 
-static int ov5640_mod_reg(struct ov5640_dev *sensor, u16 reg,
-              u8 mask, u8 val)
-{
+static int dscam6_mod_reg(struct dscam6_dev *sensor, u16 reg, u8 mask, u8 val) {
+    return 0;
+#if 0
     u8 readval;
     int ret;
 
-    ret = ov5640_read_reg(sensor, reg, &readval);
+    ret = dscam6_read_reg(sensor, reg, &readval);
     if (ret)
         return ret;
 
@@ -1059,7 +1013,8 @@ static int ov5640_mod_reg(struct ov5640_dev *sensor, u16 reg,
     val &= mask;
     val |= readval;
 
-    return ov5640_write_reg(sensor, reg, val);
+    return dscam6_write_reg(sensor, reg, val);
+#endif
 }
 
 /*
@@ -1115,54 +1070,54 @@ static int ov5640_mod_reg(struct ov5640_dev *sensor, u16 reg,
  * This is supposed to be ranging from 1 to 8, but the value is always
  * set to 3 in the vendor kernels.
  */
-#define OV5640_PLL_PREDIV   3
+#define DSCAM6_PLL_PREDIV 3
 
-#define OV5640_PLL_MULT_MIN 4
-#define OV5640_PLL_MULT_MAX 252
+#define DSCAM6_PLL_MULT_MIN 4
+#define DSCAM6_PLL_MULT_MAX 252
 
 /*
  * This is supposed to be ranging from 1 to 16, but the value is
  * always set to either 1 or 2 in the vendor kernels.
  */
-#define OV5640_SYSDIV_MIN   1
-#define OV5640_SYSDIV_MAX   16
+#define DSCAM6_SYSDIV_MIN 1
+#define DSCAM6_SYSDIV_MAX 16
 
 /*
  * This is supposed to be ranging from 1 to 2, but the value is always
  * set to 2 in the vendor kernels.
  */
-#define OV5640_PLL_ROOT_DIV         2
-#define OV5640_PLL_CTRL3_PLL_ROOT_DIV_2     BIT(4)
+#define DSCAM6_PLL_ROOT_DIV 2
+#define DSCAM6_PLL_CTRL3_PLL_ROOT_DIV_2 BIT(4)
 
 /*
  * We only supports 8-bit formats at the moment
  */
-#define OV5640_BIT_DIV              2
-#define OV5640_PLL_CTRL0_MIPI_MODE_8BIT     0x08
+#define DSCAM6_BIT_DIV 2
+#define DSCAM6_PLL_CTRL0_MIPI_MODE_8BIT 0x08
 
 /*
  * This is supposed to be ranging from 1 to 8, but the value is always
  * set to 2 in the vendor kernels.
  */
-#define OV5640_SCLK_ROOT_DIV    2
+#define DSCAM6_SCLK_ROOT_DIV 2
 
 /*
  * This is hardcoded so that the consistency is maintained between SCLK and
  * SCLK 2x.
  */
-#define OV5640_SCLK2X_ROOT_DIV (OV5640_SCLK_ROOT_DIV / 2)
+#define DSCAM6_SCLK2X_ROOT_DIV (DSCAM6_SCLK_ROOT_DIV / 2)
 
 /*
  * This is supposed to be ranging from 1 to 8, but the value is always
  * set to 1 in the vendor kernels.
  */
-#define OV5640_PCLK_ROOT_DIV            1
-#define OV5640_PLL_SYS_ROOT_DIVIDER_BYPASS  0x00
+#define DSCAM6_PCLK_ROOT_DIV 1
+#define DSCAM6_PLL_SYS_ROOT_DIVIDER_BYPASS 0x00
 
-static unsigned long ov5640_compute_sys_clk(struct ov5640_dev *sensor,
-                        u8 pll_prediv, u8 pll_mult,
-                        u8 sysdiv)
-{
+static unsigned long dscam6_compute_sys_clk(struct dscam6_dev *sensor, u8 pll_prediv, u8 pll_mult, u8 sysdiv) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     unsigned long sysclk = sensor->xclk_freq / pll_prediv * pll_mult;
 
     /* PLL1 output cannot exceed 1GHz. */
@@ -1170,22 +1125,23 @@ static unsigned long ov5640_compute_sys_clk(struct ov5640_dev *sensor,
         return 0;
 
     return sysclk / sysdiv;
+#endif
 }
 
-static unsigned long ov5640_calc_sys_clk(struct ov5640_dev *sensor,
-                     unsigned long rate,
-                     u8 *pll_prediv, u8 *pll_mult,
-                     u8 *sysdiv)
-{
+static unsigned long dscam6_calc_sys_clk(struct dscam6_dev *sensor, unsigned long rate, u8 *pll_prediv, u8 *pll_mult, u8 *sysdiv) {
+
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     unsigned long best = ~0;
     u8 best_sysdiv = 1, best_mult = 1;
     u8 _sysdiv, _pll_mult;
 
-    for (_sysdiv = OV5640_SYSDIV_MIN;
-         _sysdiv <= OV5640_SYSDIV_MAX;
+    for (_sysdiv = DSCAM6_SYSDIV_MIN;
+         _sysdiv <= DSCAM6_SYSDIV_MAX;
          _sysdiv++) {
-        for (_pll_mult = OV5640_PLL_MULT_MIN;
-             _pll_mult <= OV5640_PLL_MULT_MAX;
+        for (_pll_mult = DSCAM6_PLL_MULT_MIN;
+             _pll_mult <= DSCAM6_PLL_MULT_MAX;
              _pll_mult++) {
             unsigned long _rate;
 
@@ -1196,8 +1152,8 @@ static unsigned long ov5640_calc_sys_clk(struct ov5640_dev *sensor,
             if (_pll_mult > 127 && (_pll_mult % 2))
                 continue;
 
-            _rate = ov5640_compute_sys_clk(sensor,
-                               OV5640_PLL_PREDIV,
+            _rate = dscam6_compute_sys_clk(sensor,
+                               DSCAM6_PLL_PREDIV,
                                _pll_mult, _sysdiv);
 
             /*
@@ -1227,18 +1183,21 @@ static unsigned long ov5640_calc_sys_clk(struct ov5640_dev *sensor,
 
 out:
     *sysdiv = best_sysdiv;
-    *pll_prediv = OV5640_PLL_PREDIV;
+    *pll_prediv = DSCAM6_PLL_PREDIV;
     *pll_mult = best_mult;
 
     return best;
+#endif
 }
 
 /*
- * ov5640_set_mipi_pclk() - Calculate the clock tree configuration values
+ * dscam6_set_mipi_pclk() - Calculate the clock tree configuration values
  *              for the MIPI CSI-2 output.
  */
-static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
-{
+static int dscam6_set_mipi_pclk(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     u8 bit_div, mipi_div, pclk_div, sclk_div, sclk2x_div, root_div;
     u8 prediv, mult, sysdiv;
     unsigned long link_freq;
@@ -1248,9 +1207,9 @@ static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
     u32 num_lanes;
     int ret;
 
-    printk("dscam6::ov5640_set_mipi_pclk\n");
+    printk("dscam6::dscam6_set_mipi_pclk\n");
 
-    /* Use the link freq computed at ov5640_update_pixel_rate() time. */
+    /* Use the link freq computed at dscam6_update_pixel_rate() time. */
     link_freq = sensor->current_link_freq;
 
     /*
@@ -1259,13 +1218,13 @@ static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
      * Higher link frequencies would make sysclk > 1GHz.
      * Keep the sysclk low and do not divide in the MIPI domain.
      */
-    if (link_freq > OV5640_LINK_RATE_MAX)
+    if (link_freq > DSCAM6_LINK_RATE_MAX)
         mipi_div = 1;
     else
         mipi_div = 2;
 
     sysclk = link_freq * mipi_div;
-    ov5640_calc_sys_clk(sensor, sysclk, &prediv, &mult, &sysdiv);
+    dscam6_calc_sys_clk(sensor, sysclk, &prediv, &mult, &sysdiv);
 
     /*
      * Adjust PLL parameters to maintain the MIPI_SCLK-to-PCLK ratio.
@@ -1281,9 +1240,9 @@ static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
      * - 2 lanes: MIPI_SCLK = (4 or 5) * PCLK
      * - 1 lanes: MIPI_SCLK = (8 or 10) * PCLK
      */
-    root_div = OV5640_PLL_CTRL3_PLL_ROOT_DIV_2;
-    bit_div =  OV5640_PLL_CTRL0_MIPI_MODE_8BIT;
-    pclk_div = ilog2(OV5640_PCLK_ROOT_DIV);
+    root_div = DSCAM6_PLL_CTRL3_PLL_ROOT_DIV_2;
+    bit_div =  DSCAM6_PLL_CTRL0_MIPI_MODE_8BIT;
+    pclk_div = ilog2(DSCAM6_PCLK_ROOT_DIV);
 
     /*
      * Scaler clock:
@@ -1291,8 +1250,8 @@ static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
      * - RAW or JPEG: PCLK >= SCLK
      * - sclk2x_div = sclk_div / 2
      */
-    sclk_div = ilog2(OV5640_SCLK_ROOT_DIV);
-    sclk2x_div = ilog2(OV5640_SCLK2X_ROOT_DIV);
+    sclk_div = ilog2(DSCAM6_SCLK_ROOT_DIV);
+    sclk2x_div = ilog2(DSCAM6_SCLK2X_ROOT_DIV);
 
     /*
      * Set the pixel clock period expressed in ns with 1-bit decimal
@@ -1308,81 +1267,88 @@ static int ov5640_set_mipi_pclk(struct ov5640_dev *sensor)
     sample_rate = (link_freq * num_lanes * 2) / 16;
     pclk_period = 2000000000UL / sample_rate;
 
-    printk("dscam6::ov5640_set_mipi_pclk::num_lanes=%d,link_freq=%d \n", num_lanes,link_freq);
+    printk("dscam6::dscam6_set_mipi_pclk::num_lanes=%d,link_freq=%d \n", num_lanes,link_freq);
 
     /* Program the clock tree registers. */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL0, 0x0f, bit_div);
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL0, 0x0f, bit_div);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL1, 0xff,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL1, 0xff,
                  (sysdiv << 4) | mipi_div);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL2, 0xff, mult);
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL2, 0xff, mult);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL3, 0x1f,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL3, 0x1f,
                  root_div | prediv);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SYS_ROOT_DIVIDER, 0x3f,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SYS_ROOT_DIVIDER, 0x3f,
                  (pclk_div << 4) | (sclk2x_div << 2) | sclk_div);
     if (ret)
         return ret;
 
-    return ov5640_write_reg(sensor, OV5640_REG_PCLK_PERIOD, pclk_period);
+    return dscam6_write_reg(sensor, DSCAM6_REG_PCLK_PERIOD, pclk_period);
+#endif
 }
 
-static u32 ov5640_calc_pixel_rate(struct ov5640_dev *sensor)
-{
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    const struct ov5640_timings *timings = &mode->dvp_timings;
+static u32 dscam6_calc_pixel_rate(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    const struct dscam6_timings *timings = &mode->dvp_timings;
     u32 rate;
 
     rate = timings->htot * (timings->crop.height + timings->vblank_def);
-    rate *= ov5640_framerates[sensor->current_fr];
+    rate *= dscam6_framerates[sensor->current_fr];
 
     return rate;
+#endif
 }
 
-static unsigned long ov5640_calc_pclk(struct ov5640_dev *sensor,
-                      unsigned long rate,
-                      u8 *pll_prediv, u8 *pll_mult, u8 *sysdiv,
-                      u8 *pll_rdiv, u8 *bit_div, u8 *pclk_div)
-{
-    unsigned long _rate = rate * OV5640_PLL_ROOT_DIV * OV5640_BIT_DIV *
-                OV5640_PCLK_ROOT_DIV;
+static unsigned long dscam6_calc_pclk(struct dscam6_dev *sensor, unsigned long rate, u8 *pll_prediv, u8 *pll_mult, u8 *sysdiv, u8 *pll_rdiv, u8 *bit_div,
+                                      u8 *pclk_div) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
+    unsigned long _rate = rate * DSCAM6_PLL_ROOT_DIV * DSCAM6_BIT_DIV *
+                DSCAM6_PCLK_ROOT_DIV;
 
-    _rate = ov5640_calc_sys_clk(sensor, _rate, pll_prediv, pll_mult,
+    _rate = dscam6_calc_sys_clk(sensor, _rate, pll_prediv, pll_mult,
                     sysdiv);
-    *pll_rdiv = OV5640_PLL_ROOT_DIV;
-    *bit_div = OV5640_BIT_DIV;
-    *pclk_div = OV5640_PCLK_ROOT_DIV;
+    *pll_rdiv = DSCAM6_PLL_ROOT_DIV;
+    *bit_div = DSCAM6_BIT_DIV;
+    *pclk_div = DSCAM6_PCLK_ROOT_DIV;
 
     return _rate / *pll_rdiv / *bit_div / *pclk_div;
+#endif
 }
 
-static int ov5640_set_dvp_pclk(struct ov5640_dev *sensor)
-{
+static int dscam6_set_dvp_pclk(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     u8 prediv, mult, sysdiv, pll_rdiv, bit_div, pclk_div;
     u32 rate;
     int ret;
 
-    rate = ov5640_calc_pixel_rate(sensor);
-    rate *= ov5640_code_to_bpp(sensor, sensor->fmt.code);
+    rate = dscam6_calc_pixel_rate(sensor);
+    rate *= dscam6_code_to_bpp(sensor, sensor->fmt.code);
     rate /= sensor->ep.bus.parallel.bus_width;
 
-    ov5640_calc_pclk(sensor, rate, &prediv, &mult, &sysdiv, &pll_rdiv,
+    dscam6_calc_pclk(sensor, rate, &prediv, &mult, &sysdiv, &pll_rdiv,
              &bit_div, &pclk_div);
 
     if (bit_div == 2)
         bit_div = 0xA;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL0,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL0,
                  0x0f, bit_div);
     if (ret)
         return ret;
@@ -1391,29 +1357,31 @@ static int ov5640_set_dvp_pclk(struct ov5640_dev *sensor)
      * We need to set sysdiv according to the clock, and to clear
      * the MIPI divider.
      */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL1,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL1,
                  0xff, sysdiv << 4);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL2,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL2,
                  0xff, mult);
     if (ret)
         return ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SC_PLL_CTRL3,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SC_PLL_CTRL3,
                  0x1f, prediv | ((pll_rdiv - 1) << 4));
     if (ret)
         return ret;
 
-    return ov5640_mod_reg(sensor, OV5640_REG_SYS_ROOT_DIVIDER, 0x30,
+    return dscam6_mod_reg(sensor, DSCAM6_REG_SYS_ROOT_DIVIDER, 0x30,
                   (ilog2(pclk_div) << 4));
+#endif
 }
 
 /* set JPEG framing sizes */
-static int ov5640_set_jpeg_timings(struct ov5640_dev *sensor,
-                   const struct ov5640_mode_info *mode)
-{
+static int dscam6_set_jpeg_timings(struct dscam6_dev *sensor, const struct dscam6_mode_info *mode) {
+    csi_dev_dbg("on=%d\n", __func__);
+    return 0;
+#if 0
     int ret;
 
     /*
@@ -1423,87 +1391,90 @@ static int ov5640_set_jpeg_timings(struct ov5640_dev *sensor,
      * No padding done. Last line may have less data. Varying
      * number of lines per frame, depending on amount of data.
      */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_JPG_MODE_SELECT, 0x7, 0x3);
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_JPG_MODE_SELECT, 0x7, 0x3);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_VFIFO_HSIZE, mode->width);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_VFIFO_HSIZE, mode->width);
     if (ret < 0)
         return ret;
 
-    return ov5640_write_reg16(sensor, OV5640_REG_VFIFO_VSIZE, mode->height);
+    return dscam6_write_reg16(sensor, DSCAM6_REG_VFIFO_VSIZE, mode->height);
+#endif
 }
 
-/* download ov5640 settings to sensor through i2c */
-static int ov5640_set_timings(struct ov5640_dev *sensor,
-                  const struct ov5640_mode_info *mode)
-{
-    const struct ov5640_timings *timings;
+/* download dscam6 settings to sensor through i2c */
+static int dscam6_set_timings(struct dscam6_dev *sensor, const struct dscam6_mode_info *mode) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
+    const struct dscam6_timings *timings;
     const struct v4l2_rect *analog_crop;
     const struct v4l2_rect *crop;
     int ret;
 
     if (sensor->fmt.code == MEDIA_BUS_FMT_JPEG_1X8) {
-        ret = ov5640_set_jpeg_timings(sensor, mode);
+        ret = dscam6_set_jpeg_timings(sensor, mode);
         if (ret < 0)
             return ret;
     }
 
-    timings = ov5640_timings(sensor, mode);
+    timings = dscam6_timings(sensor, mode);
     analog_crop = &timings->analog_crop;
     crop = &timings->crop;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_HS,
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_HS,
                  analog_crop->left);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_VS,
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VS,
                  analog_crop->top);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_HW,
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_HW,
                  analog_crop->left + analog_crop->width - 1);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_VH,
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VH,
                  analog_crop->top + analog_crop->height - 1);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_HOFFS, crop->left);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_HOFFS, crop->left);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_VOFFS, crop->top);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VOFFS, crop->top);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_DVPHO, mode->width);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_DVPHO, mode->width);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_DVPVO, mode->height);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_DVPVO, mode->height);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_HTS, timings->htot);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_HTS, timings->htot);
     if (ret < 0)
         return ret;
 
-    ret = ov5640_write_reg16(sensor, OV5640_REG_TIMING_VTS,
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VTS,
                  mode->height + timings->vblank_def);
     if (ret < 0)
         return ret;
 
     return 0;
+#endif
 }
 
-static void ov5640_load_regs(struct ov5640_dev *sensor,
-                 const struct reg_value *regs, unsigned int regnum)
-{
+static void dscam6_load_regs(struct dscam6_dev *sensor, const struct reg_value *regs, unsigned int regnum) {
+    csi_dev_dbg("enter %s\n", __func__);
+#if 0 
     unsigned int i;
     u32 delay_ms;
     u16 reg_addr;
@@ -1517,108 +1488,133 @@ static void ov5640_load_regs(struct ov5640_dev *sensor,
         mask = regs->mask;
 
         /* remain in power down mode for DVP */
-        if (regs->reg_addr == OV5640_REG_SYS_CTRL0 &&
-            val == OV5640_REG_SYS_CTRL0_SW_PWUP &&
-            !ov5640_is_csi2(sensor))
+        if (regs->reg_addr == DSCAM6_REG_SYS_CTRL0 &&
+            val == DSCAM6_REG_SYS_CTRL0_SW_PWUP &&
+            !dscam6_is_csi2(sensor))
             continue;
 
         if (mask)
-            ret = ov5640_mod_reg(sensor, reg_addr, mask, val);
+            ret = dscam6_mod_reg(sensor, reg_addr, mask, val);
         else
-            ret = ov5640_write_reg(sensor, reg_addr, val);
+            ret = dscam6_write_reg(sensor, reg_addr, val);
         if (ret)
             break;
 
         if (delay_ms)
             usleep_range(1000 * delay_ms, 1000 * delay_ms + 100);
     }
+#endif
 }
 
-static int ov5640_set_autoexposure(struct ov5640_dev *sensor, bool on)
-{
-    return ov5640_mod_reg(sensor, OV5640_REG_AEC_PK_MANUAL,
+static int dscam6_set_autoexposure(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
+    return dscam6_mod_reg(sensor, DSCAM6_REG_AEC_PK_MANUAL,
                   BIT(0), on ? 0 : BIT(0));
+#endif
 }
 
 /* read exposure, in number of line periods */
-static int ov5640_get_exposure(struct ov5640_dev *sensor)
-{
+static int dscam6_get_exposure(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     int exp, ret;
     u8 temp;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_AEC_PK_EXPOSURE_HI, &temp);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_AEC_PK_EXPOSURE_HI, &temp);
     if (ret)
         return ret;
     exp = ((int)temp & 0x0f) << 16;
-    ret = ov5640_read_reg(sensor, OV5640_REG_AEC_PK_EXPOSURE_MED, &temp);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_AEC_PK_EXPOSURE_MED, &temp);
     if (ret)
         return ret;
     exp |= ((int)temp << 8);
-    ret = ov5640_read_reg(sensor, OV5640_REG_AEC_PK_EXPOSURE_LO, &temp);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_AEC_PK_EXPOSURE_LO, &temp);
     if (ret)
         return ret;
     exp |= (int)temp;
 
     return exp >> 4;
+#endif
 }
 
 /* write exposure, given number of line periods */
-static int ov5640_set_exposure(struct ov5640_dev *sensor, u32 exposure)
-{
+static int dscam6_set_exposure(struct dscam6_dev *sensor, u32 exposure) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     int ret;
 
     exposure <<= 4;
 
-    ret = ov5640_write_reg(sensor,
-                   OV5640_REG_AEC_PK_EXPOSURE_LO,
+    ret = dscam6_write_reg(sensor,
+                   DSCAM6_REG_AEC_PK_EXPOSURE_LO,
                    exposure & 0xff);
     if (ret)
         return ret;
-    ret = ov5640_write_reg(sensor,
-                   OV5640_REG_AEC_PK_EXPOSURE_MED,
+    ret = dscam6_write_reg(sensor,
+                   DSCAM6_REG_AEC_PK_EXPOSURE_MED,
                    (exposure >> 8) & 0xff);
     if (ret)
         return ret;
-    return ov5640_write_reg(sensor,
-                OV5640_REG_AEC_PK_EXPOSURE_HI,
+    return dscam6_write_reg(sensor,
+                DSCAM6_REG_AEC_PK_EXPOSURE_HI,
                 (exposure >> 16) & 0x0f);
+#endif
 }
 
-static int ov5640_get_gain(struct ov5640_dev *sensor)
-{
+static int dscam6_get_gain(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
+
     u16 gain;
     int ret;
 
-    ret = ov5640_read_reg16(sensor, OV5640_REG_AEC_PK_REAL_GAIN, &gain);
+    ret = dscam6_read_reg16(sensor, DSCAM6_REG_AEC_PK_REAL_GAIN, &gain);
     if (ret)
         return ret;
 
     return gain & 0x3ff;
+#endif
 }
 
-static int ov5640_set_gain(struct ov5640_dev *sensor, int gain)
-{
-    return ov5640_write_reg16(sensor, OV5640_REG_AEC_PK_REAL_GAIN,
+static int dscam6_set_gain(struct dscam6_dev *sensor, int gain) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
+    return dscam6_write_reg16(sensor, DSCAM6_REG_AEC_PK_REAL_GAIN,
                   (u16)gain & 0x3ff);
+#endif
 }
 
-static int ov5640_set_autogain(struct ov5640_dev *sensor, bool on)
-{
-    return ov5640_mod_reg(sensor, OV5640_REG_AEC_PK_MANUAL,
+static int dscam6_set_autogain(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
+    return dscam6_mod_reg(sensor, DSCAM6_REG_AEC_PK_MANUAL,
                   BIT(1), on ? 0 : BIT(1));
+#endif
 }
 
-static int ov5640_set_stream_dvp(struct ov5640_dev *sensor, bool on)
-{
+static int dscam6_set_stream_dvp(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     // 이곳은 call되지 않는다.
-    printk("dscam6::ov5640_set_stream_dvp\n");
-    return ov5640_write_reg(sensor, OV5640_REG_SYS_CTRL0, on ?
-                OV5640_REG_SYS_CTRL0_SW_PWUP :
-                OV5640_REG_SYS_CTRL0_SW_PWDN);
+    printk("dscam6::dscam6_set_stream_dvp\n");
+    return dscam6_write_reg(sensor, DSCAM6_REG_SYS_CTRL0, on ?
+                DSCAM6_REG_SYS_CTRL0_SW_PWUP :
+                DSCAM6_REG_SYS_CTRL0_SW_PWDN);
+#endif
 }
 
-static int ov5640_set_stream_mipi(struct ov5640_dev *sensor, bool on)
-{
+static int dscam6_set_stream_mipi(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     int ret;
 
     /*
@@ -1639,24 +1635,27 @@ static int ov5640_set_stream_mipi(struct ov5640_dev *sensor, bool on)
      * [1:0] = 01/00: FIXME: 'debug'
      */
 
-    printk("dscam6::ov5640_set_stream_mipi\n");
+    printk("dscam6::dscam6_set_stream_mipi\n");
 
-    ret = ov5640_write_reg(sensor, OV5640_REG_IO_MIPI_CTRL00,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_IO_MIPI_CTRL00,
                    on ? 0x45 : 0x40);
     if (ret)
         return ret;
 
-    ret = ov5640_write_reg(sensor, OV5640_REG_FRAME_CTRL01,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_FRAME_CTRL01,
                 on ? 0x00 : 0x0f);
     if (ret)
         return ret;
 
-    return ov5640_write_reg(sensor, OV5640_REG_SYS_CTRL0,
+    return dscam6_write_reg(sensor, DSCAM6_REG_SYS_CTRL0,
                 on ? 0x02 : 0x42);
+#endif
 }
 
-static int ov5640_get_sysclk(struct ov5640_dev *sensor)
-{
+static int dscam6_get_sysclk(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
      /* calculate sysclk */
     u32 xvclk = sensor->xclk_freq / 10000;
     u32 multiplier, prediv, VCO, sysdiv, pll_rdiv;
@@ -1665,32 +1664,32 @@ static int ov5640_get_sysclk(struct ov5640_dev *sensor)
     u8 temp1, temp2;
     int ret;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_SC_PLL_CTRL0, &temp1);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_SC_PLL_CTRL0, &temp1);
     if (ret)
         return ret;
     temp2 = temp1 & 0x0f;
     if (temp2 == 8 || temp2 == 10)
         bit_div2x = temp2 / 2;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_SC_PLL_CTRL1, &temp1);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_SC_PLL_CTRL1, &temp1);
     if (ret)
         return ret;
     sysdiv = temp1 >> 4;
     if (sysdiv == 0)
         sysdiv = 16;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_SC_PLL_CTRL2, &temp1);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_SC_PLL_CTRL2, &temp1);
     if (ret)
         return ret;
     multiplier = temp1;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_SC_PLL_CTRL3, &temp1);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_SC_PLL_CTRL3, &temp1);
     if (ret)
         return ret;
     prediv = temp1 & 0x0f;
     pll_rdiv = ((temp1 >> 4) & 0x01) + 1;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_SYS_ROOT_DIVIDER, &temp1);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_SYS_ROOT_DIVIDER, &temp1);
     if (ret)
         return ret;
     temp2 = temp1 & 0x03;
@@ -1704,62 +1703,76 @@ static int ov5640_get_sysclk(struct ov5640_dev *sensor)
     sysclk = VCO / sysdiv / pll_rdiv * 2 / bit_div2x / sclk_rdiv;
 
     return sysclk;
+#endif
 }
 
-static int ov5640_set_night_mode(struct ov5640_dev *sensor)
-{
+static int dscam6_set_night_mode(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
      /* read HTS from register settings */
     u8 mode;
     int ret;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_AEC_CTRL00, &mode);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_AEC_CTRL00, &mode);
     if (ret)
         return ret;
     mode &= 0xfb;
-    return ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL00, mode);
+    return dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL00, mode);
+#endif
 }
 
-static int ov5640_get_hts(struct ov5640_dev *sensor)
-{
+static int dscam6_get_hts(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     /* read HTS from register settings */
     u16 hts;
     int ret;
 
-    ret = ov5640_read_reg16(sensor, OV5640_REG_TIMING_HTS, &hts);
+    ret = dscam6_read_reg16(sensor, DSCAM6_REG_TIMING_HTS, &hts);
     if (ret)
         return ret;
     return hts;
+#endif
 }
 
-static int ov5640_get_vts(struct ov5640_dev *sensor)
-{
+static int dscam6_get_vts(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     u16 vts;
     int ret;
 
-    ret = ov5640_read_reg16(sensor, OV5640_REG_TIMING_VTS, &vts);
+    ret = dscam6_read_reg16(sensor, DSCAM6_REG_TIMING_VTS, &vts);
     if (ret)
         return ret;
     return vts;
+#endif
 }
 
-static int ov5640_set_vts(struct ov5640_dev *sensor, int vts)
-{
-    return ov5640_write_reg16(sensor, OV5640_REG_TIMING_VTS, vts);
+static int dscam6_set_vts(struct dscam6_dev *sensor, int vts) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+
+    // return dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VTS, vts);
 }
 
-static int ov5640_get_light_freq(struct ov5640_dev *sensor)
-{
+static int dscam6_get_light_freq(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     /* get banding filter value */
     int ret, light_freq = 0;
     u8 temp, temp1;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_HZ5060_CTRL01, &temp);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_HZ5060_CTRL01, &temp);
     if (ret)
         return ret;
 
     if (temp & 0x80) {
         /* manual */
-        ret = ov5640_read_reg(sensor, OV5640_REG_HZ5060_CTRL00,
+        ret = dscam6_read_reg(sensor, DSCAM6_REG_HZ5060_CTRL00,
                       &temp1);
         if (ret)
             return ret;
@@ -1772,7 +1785,7 @@ static int ov5640_get_light_freq(struct ov5640_dev *sensor)
         }
     } else {
         /* auto */
-        ret = ov5640_read_reg(sensor, OV5640_REG_SIGMADELTA_CTRL0C,
+        ret = dscam6_read_reg(sensor, DSCAM6_REG_SIGMADELTA_CTRL0C,
                       &temp1);
         if (ret)
             return ret;
@@ -1786,22 +1799,25 @@ static int ov5640_get_light_freq(struct ov5640_dev *sensor)
     }
 
     return light_freq;
+#endif
 }
 
-static int ov5640_set_bandingfilter(struct ov5640_dev *sensor)
-{
+static int dscam6_set_bandingfilter(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     u32 band_step60, max_band60, band_step50, max_band50, prev_vts;
     int ret;
 
     /* read preview PCLK */
-    ret = ov5640_get_sysclk(sensor);
+    ret = dscam6_get_sysclk(sensor);
     if (ret < 0)
         return ret;
     if (ret == 0)
         return -EINVAL;
     sensor->prev_sysclk = ret;
     /* read preview HTS */
-    ret = ov5640_get_hts(sensor);
+    ret = dscam6_get_hts(sensor);
     if (ret < 0)
         return ret;
     if (ret == 0)
@@ -1809,7 +1825,7 @@ static int ov5640_set_bandingfilter(struct ov5640_dev *sensor)
     sensor->prev_hts = ret;
 
     /* read preview VTS */
-    ret = ov5640_get_vts(sensor);
+    ret = dscam6_get_vts(sensor);
     if (ret < 0)
         return ret;
     prev_vts = ret;
@@ -1817,29 +1833,32 @@ static int ov5640_set_bandingfilter(struct ov5640_dev *sensor)
     /* calculate banding filter */
     /* 60Hz */
     band_step60 = sensor->prev_sysclk * 100 / sensor->prev_hts * 100 / 120;
-    ret = ov5640_write_reg16(sensor, OV5640_REG_AEC_B60_STEP, band_step60);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_AEC_B60_STEP, band_step60);
     if (ret)
         return ret;
     if (!band_step60)
         return -EINVAL;
     max_band60 = (int)((prev_vts - 4) / band_step60);
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL0D, max_band60);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL0D, max_band60);
     if (ret)
         return ret;
 
     /* 50Hz */
     band_step50 = sensor->prev_sysclk * 100 / sensor->prev_hts;
-    ret = ov5640_write_reg16(sensor, OV5640_REG_AEC_B50_STEP, band_step50);
+    ret = dscam6_write_reg16(sensor, DSCAM6_REG_AEC_B50_STEP, band_step50);
     if (ret)
         return ret;
     if (!band_step50)
         return -EINVAL;
     max_band50 = (int)((prev_vts - 4) / band_step50);
-    return ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL0E, max_band50);
+    return dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL0E, max_band50);
+#endif
 }
 
-static int ov5640_set_ae_target(struct ov5640_dev *sensor, int target)
-{
+static int dscam6_set_ae_target(struct dscam6_dev *sensor, int target) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     /* stable in high */
     u32 fast_high, fast_low;
     int ret;
@@ -1853,45 +1872,52 @@ static int ov5640_set_ae_target(struct ov5640_dev *sensor, int target)
 
     fast_low = sensor->ae_low >> 1;
 
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL0F, sensor->ae_high);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL0F, sensor->ae_high);
     if (ret)
         return ret;
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL10, sensor->ae_low);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL10, sensor->ae_low);
     if (ret)
         return ret;
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL1B, sensor->ae_high);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL1B, sensor->ae_high);
     if (ret)
         return ret;
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL1E, sensor->ae_low);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL1E, sensor->ae_low);
     if (ret)
         return ret;
-    ret = ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL11, fast_high);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL11, fast_high);
     if (ret)
         return ret;
-    return ov5640_write_reg(sensor, OV5640_REG_AEC_CTRL1F, fast_low);
+    return dscam6_write_reg(sensor, DSCAM6_REG_AEC_CTRL1F, fast_low);
+#endif
 }
 
-static int ov5640_get_binning(struct ov5640_dev *sensor)
-{
+static int dscam6_get_binning(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+
+    return 0;
+#if 0 
     u8 temp;
     int ret;
 
-    ret = ov5640_read_reg(sensor, OV5640_REG_TIMING_TC_REG21, &temp);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_TIMING_TC_REG21, &temp);
     if (ret)
         return ret;
 
     return temp & BIT(0);
+#endif
 }
 
-static int ov5640_set_binning(struct ov5640_dev *sensor, bool enable)
-{
+static int dscam6_set_binning(struct dscam6_dev *sensor, bool enable) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     int ret;
 
     /*
      * TIMING TC REG21:
      * - [0]:   Horizontal binning enable
      */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_TIMING_TC_REG21,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_TIMING_TC_REG21,
                  BIT(0), enable ? BIT(0) : 0);
     if (ret)
         return ret;
@@ -1900,43 +1926,40 @@ static int ov5640_set_binning(struct ov5640_dev *sensor, bool enable)
      * - [0]:   Undocumented, but hardcoded init sequences
      *      are always setting REG21/REG20 bit 0 to same value...
      */
-    return ov5640_mod_reg(sensor, OV5640_REG_TIMING_TC_REG20,
+    return dscam6_mod_reg(sensor, DSCAM6_REG_TIMING_TC_REG20,
                   BIT(0), enable ? BIT(0) : 0);
+#endif
 }
 
-static int ov5640_set_virtual_channel(struct ov5640_dev *sensor)
-{
+static int dscam6_set_virtual_channel(struct dscam6_dev *sensor) {
     struct i2c_client *client = sensor->i2c_client;
     u8 temp, channel = virtual_channel;
     int ret;
+    csi_dev_dbg("enter %s\n", __func__);
 
     if (channel > 3) {
-        dev_err(&client->dev,
-            "%s: wrong virtual_channel parameter, expected (0..3), got %d\n",
-            __func__, channel);
+        dev_err(&client->dev, "%s: wrong virtual_channel parameter, expected (0..3), got %d\n", __func__, channel);
         return -EINVAL;
     }
-
-    ret = ov5640_read_reg(sensor, OV5640_REG_DEBUG_MODE, &temp);
+#if 0 
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_DEBUG_MODE, &temp);
     if (ret)
         return ret;
     temp &= ~(3 << 6);
     temp |= (channel << 6);
-    return ov5640_write_reg(sensor, OV5640_REG_DEBUG_MODE, temp);
+    return dscam6_write_reg(sensor, DSCAM6_REG_DEBUG_MODE, temp);
+#endif
+    return 0;
 }
 
-static const struct ov5640_mode_info *
-ov5640_find_mode(struct ov5640_dev *sensor, int width, int height, bool nearest)
-{
-    const struct ov5640_mode_info *mode;
+static const struct dscam6_mode_info *dscam6_find_mode(struct dscam6_dev *sensor, int width, int height, bool nearest) {
+    const struct dscam6_mode_info *mode;
 
-    mode = v4l2_find_nearest_size(ov5640_mode_data,
-                      ARRAY_SIZE(ov5640_mode_data),
-                      width, height, width, height);
+    csi_dev_dbg("enter %s\n", __func__);
 
-    if (!mode ||
-        (!nearest &&
-         (mode->width != width || mode->height != height)))
+    mode = v4l2_find_nearest_size(dscam6_mode_data, ARRAY_SIZE(dscam6_mode_data), width, height, width, height);
+
+    if (!mode || (!nearest && (mode->width != width || mode->height != height)))
         return NULL;
 
     return mode;
@@ -1946,9 +1969,10 @@ ov5640_find_mode(struct ov5640_dev *sensor, int width, int height, bool nearest)
  * sensor changes between scaling and subsampling, go through
  * exposure calculation
  */
-static int ov5640_set_mode_exposure_calc(struct ov5640_dev *sensor,
-                     const struct ov5640_mode_info *mode)
-{
+static int dscam6_set_mode_exposure_calc(struct dscam6_dev *sensor, const struct dscam6_mode_info *mode) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
     u32 prev_shutter, prev_gain16;
     u32 cap_shutter, cap_gain16;
     u32 cap_sysclk, cap_hts, cap_vts;
@@ -1961,52 +1985,52 @@ static int ov5640_set_mode_exposure_calc(struct ov5640_dev *sensor,
         return -EINVAL;
 
     /* read preview shutter */
-    ret = ov5640_get_exposure(sensor);
+    ret = dscam6_get_exposure(sensor);
     if (ret < 0)
         return ret;
     prev_shutter = ret;
-    ret = ov5640_get_binning(sensor);
+    ret = dscam6_get_binning(sensor);
     if (ret < 0)
         return ret;
-    if (ret && mode->id != OV5640_MODE_720P_1280_720 &&
-        mode->id != OV5640_MODE_1080P_1920_1080)
+    if (ret && mode->id != DSCAM6_MODE_720P_1280_720 &&
+        mode->id != DSCAM6_MODE_1080P_1920_1080)
         prev_shutter *= 2;
 
     /* read preview gain */
-    ret = ov5640_get_gain(sensor);
+    ret = dscam6_get_gain(sensor);
     if (ret < 0)
         return ret;
     prev_gain16 = ret;
 
     /* get average */
-    ret = ov5640_read_reg(sensor, OV5640_REG_AVG_READOUT, &average);
+    ret = dscam6_read_reg(sensor, DSCAM6_REG_AVG_READOUT, &average);
     if (ret)
         return ret;
 
     /* turn off night mode for capture */
-    ret = ov5640_set_night_mode(sensor);
+    ret = dscam6_set_night_mode(sensor);
     if (ret < 0)
         return ret;
 
     /* Write capture setting */
-    ov5640_load_regs(sensor, mode->reg_data, mode->reg_data_size);
-    ret = ov5640_set_timings(sensor, mode);
+    // dscam6_load_regs(sensor, mode->reg_data, mode->reg_data_size);
+    ret = dscam6_set_timings(sensor, mode);
     if (ret < 0)
         return ret;
 
     /* read capture VTS */
-    ret = ov5640_get_vts(sensor);
+    ret = dscam6_get_vts(sensor);
     if (ret < 0)
         return ret;
     cap_vts = ret;
-    ret = ov5640_get_hts(sensor);
+    ret = dscam6_get_hts(sensor);
     if (ret < 0)
         return ret;
     if (ret == 0)
         return -EINVAL;
     cap_hts = ret;
 
-    ret = ov5640_get_sysclk(sensor);
+    ret = dscam6_get_sysclk(sensor);
     if (ret < 0)
         return ret;
     if (ret == 0)
@@ -2014,7 +2038,7 @@ static int ov5640_set_mode_exposure_calc(struct ov5640_dev *sensor,
     cap_sysclk = ret;
 
     /* calculate capture banding filter */
-    ret = ov5640_get_light_freq(sensor);
+    ret = dscam6_get_light_freq(sensor);
     if (ret < 0)
         return ret;
     light_freq = ret;
@@ -2028,7 +2052,7 @@ static int ov5640_set_mode_exposure_calc(struct ov5640_dev *sensor,
     }
 
     if (!sensor->prev_sysclk) {
-        ret = ov5640_get_sysclk(sensor);
+        ret = dscam6_get_sysclk(sensor);
         if (ret < 0)
             return ret;
         if (ret == 0)
@@ -2087,42 +2111,48 @@ static int ov5640_set_mode_exposure_calc(struct ov5640_dev *sensor,
     }
 
     /* set capture gain */
-    ret = ov5640_set_gain(sensor, cap_gain16);
+    ret = dscam6_set_gain(sensor, cap_gain16);
     if (ret)
         return ret;
 
     /* write capture shutter */
     if (cap_shutter > (cap_vts - 4)) {
         cap_vts = cap_shutter + 4;
-        ret = ov5640_set_vts(sensor, cap_vts);
+        ret = dscam6_set_vts(sensor, cap_vts);
         if (ret < 0)
             return ret;
     }
 
     /* set exposure */
-    return ov5640_set_exposure(sensor, cap_shutter);
+    return dscam6_set_exposure(sensor, cap_shutter);
+#endif
 }
 
 /*
  * if sensor changes inside scaling or subsampling
  * change mode directly
  */
-static int ov5640_set_mode_direct(struct ov5640_dev *sensor,
-                  const struct ov5640_mode_info *mode)
-{
+static int dscam6_set_mode_direct(struct dscam6_dev *sensor, const struct dscam6_mode_info *mode) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     if (!mode->reg_data)
         return -EINVAL;
 
     /* Write capture setting */
-    ov5640_load_regs(sensor, mode->reg_data, mode->reg_data_size);
-    return ov5640_set_timings(sensor, mode);
+    dscam6_load_regs(sensor, mode->reg_data, mode->reg_data_size);
+    return dscam6_set_timings(sensor, mode);
+#endif
 }
 
-static int ov5640_set_mode(struct ov5640_dev *sensor)
-{
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    const struct ov5640_mode_info *orig_mode = sensor->last_mode;
-    enum ov5640_downsize_mode dn_mode, orig_dn_mode;
+static int dscam6_set_mode(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0 
+
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    const struct dscam6_mode_info *orig_mode = sensor->last_mode;
+    enum dscam6_downsize_mode dn_mode, orig_dn_mode;
     bool auto_gain = sensor->ctrls.auto_gain->val == 1;
     bool auto_exp =  sensor->ctrls.auto_exp->val == V4L2_EXPOSURE_AUTO;
     int ret;
@@ -2132,21 +2162,21 @@ static int ov5640_set_mode(struct ov5640_dev *sensor)
 
     /* auto gain and exposure must be turned off when changing modes */
     if (auto_gain) {
-        ret = ov5640_set_autogain(sensor, false);
+        ret = dscam6_set_autogain(sensor, false);
         if (ret)
             return ret;
     }
 
     if (auto_exp) {
-        ret = ov5640_set_autoexposure(sensor, false);
+        ret = dscam6_set_autoexposure(sensor, false);
         if (ret)
             goto restore_auto_gain;
     }
 
-    if (ov5640_is_csi2(sensor))
-        ret = ov5640_set_mipi_pclk(sensor);
+    if (dscam6_is_csi2(sensor))
+        ret = dscam6_set_mipi_pclk(sensor);
     else
-        ret = ov5640_set_dvp_pclk(sensor);
+        ret = dscam6_set_dvp_pclk(sensor);
     if (ret < 0)
         return 0;
 
@@ -2156,36 +2186,36 @@ static int ov5640_set_mode(struct ov5640_dev *sensor)
          * change between subsampling and scaling
          * go through exposure calculation
          */
-        ret = ov5640_set_mode_exposure_calc(sensor, mode);
+        ret = dscam6_set_mode_exposure_calc(sensor, mode);
     } else {
         /*
          * change inside subsampling or scaling
          * download firmware directly
          */
-        ret = ov5640_set_mode_direct(sensor, mode);
+        ret = dscam6_set_mode_direct(sensor, mode);
     }
     if (ret < 0)
         goto restore_auto_exp_gain;
 
     /* restore auto gain and exposure */
     if (auto_gain)
-        ov5640_set_autogain(sensor, true);
+        dscam6_set_autogain(sensor, true);
     if (auto_exp)
-        ov5640_set_autoexposure(sensor, true);
+        dscam6_set_autoexposure(sensor, true);
 
-    ret = ov5640_set_binning(sensor, dn_mode != SCALING);
+    ret = dscam6_set_binning(sensor, dn_mode != SCALING);
     if (ret < 0)
         return ret;
-    ret = ov5640_set_ae_target(sensor, sensor->ae_target);
+    ret = dscam6_set_ae_target(sensor, sensor->ae_target);
     if (ret < 0)
         return ret;
-    ret = ov5640_get_light_freq(sensor);
+    ret = dscam6_get_light_freq(sensor);
     if (ret < 0)
         return ret;
-    ret = ov5640_set_bandingfilter(sensor);
+    ret = dscam6_set_bandingfilter(sensor);
     if (ret < 0)
         return ret;
-    ret = ov5640_set_virtual_channel(sensor);
+    ret = dscam6_set_virtual_channel(sensor);
     if (ret < 0)
         return ret;
 
@@ -2196,43 +2226,48 @@ static int ov5640_set_mode(struct ov5640_dev *sensor)
 
 restore_auto_exp_gain:
     if (auto_exp)
-        ov5640_set_autoexposure(sensor, true);
+        dscam6_set_autoexposure(sensor, true);
 restore_auto_gain:
     if (auto_gain)
-        ov5640_set_autogain(sensor, true);
+        dscam6_set_autogain(sensor, true);
 
     return ret;
+#endif
 }
 
-static int ov5640_set_framefmt(struct ov5640_dev *sensor,
-                   struct v4l2_mbus_framefmt *format);
+static int dscam6_set_framefmt(struct dscam6_dev *sensor, struct v4l2_mbus_framefmt *format);
 
 /* restore the last set video mode after chip power-on */
-static int ov5640_restore_mode(struct ov5640_dev *sensor)
-{
+static int dscam6_restore_mode(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     int ret;
 
     /* first load the initial register values */
-    ov5640_load_regs(sensor, ov5640_init_setting,
-             ARRAY_SIZE(ov5640_init_setting));
+    dscam6_load_regs(sensor, dscam6_init_setting,
+             ARRAY_SIZE(dscam6_init_setting));
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SYS_ROOT_DIVIDER, 0x3f,
-                 (ilog2(OV5640_SCLK2X_ROOT_DIV) << 2) |
-                 ilog2(OV5640_SCLK_ROOT_DIV));
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SYS_ROOT_DIVIDER, 0x3f,
+                 (ilog2(DSCAM6_SCLK2X_ROOT_DIV) << 2) |
+                 ilog2(DSCAM6_SCLK_ROOT_DIV));
     if (ret)
         return ret;
 
     /* now restore the last capture mode */
-    ret = ov5640_set_mode(sensor);
+    ret = dscam6_set_mode(sensor);
     if (ret < 0)
         return ret;
 
-    return ov5640_set_framefmt(sensor, &sensor->fmt);
+    return dscam6_set_framefmt(sensor, &sensor->fmt);
+#endif
 }
 
-static void ov5640_power(struct ov5640_dev *sensor, bool enable)
-{
+static void dscam6_power(struct dscam6_dev *sensor, bool enable) {
+    csi_dev_dbg("on=%d\n", __func__);
+#if 0
     gpiod_set_value_cansleep(sensor->pwdn_gpio, enable ? 0 : 1);
+#endif
 }
 
 /*
@@ -2249,15 +2284,17 @@ static void ov5640_power(struct ov5640_dev *sensor, bool enable)
  * should still toggle the pwdn_gpio below with the appropriate delays, while
  * the calls to reset_gpio will be ignored.
  */
-static void ov5640_powerup_sequence(struct ov5640_dev *sensor)
-{
+static void dscam6_powerup_sequence(struct dscam6_dev *sensor) {
+    csi_dev_dbg("on=%d\n", __func__);
+
+#if 0
     if (sensor->pwdn_gpio) {
         gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 
         /* camera power cycle */
-        ov5640_power(sensor, false);
+        dscam6_power(sensor, false);
         usleep_range(5000, 10000);
-        ov5640_power(sensor, true);
+        dscam6_power(sensor, true);
         usleep_range(5000, 10000);
 
         gpiod_set_value_cansleep(sensor->reset_gpio, 1);
@@ -2266,14 +2303,17 @@ static void ov5640_powerup_sequence(struct ov5640_dev *sensor)
         gpiod_set_value_cansleep(sensor->reset_gpio, 0);
     } else {
         /* software reset */
-        ov5640_write_reg(sensor, OV5640_REG_SYS_CTRL0,
-                 OV5640_REG_SYS_CTRL0_SW_RST);
+        dscam6_write_reg(sensor, DSCAM6_REG_SYS_CTRL0,
+                 DSCAM6_REG_SYS_CTRL0_SW_RST);
     }
     usleep_range(20000, 25000);
+#endif
 }
 
-static int ov5640_set_power_on(struct ov5640_dev *sensor)
-{
+static int dscam6_set_power_on(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     struct i2c_client *client = sensor->i2c_client;
     int ret;
 
@@ -2284,7 +2324,7 @@ static int ov5640_set_power_on(struct ov5640_dev *sensor)
         return ret;
     }
 
-    ret = regulator_bulk_enable(OV5640_NUM_SUPPLIES,
+    ret = regulator_bulk_enable(DSCAM6_NUM_SUPPLIES,
                     sensor->supplies);
     if (ret) {
         dev_err(&client->dev, "%s: failed to enable regulators\n",
@@ -2292,38 +2332,44 @@ static int ov5640_set_power_on(struct ov5640_dev *sensor)
         goto xclk_off;
     }
 
-    ov5640_powerup_sequence(sensor);
+    dscam6_powerup_sequence(sensor);
 
-    ret = ov5640_init_slave_id(sensor);
+    ret = dscam6_init_slave_id(sensor);
     if (ret)
         goto power_off;
 
     return 0;
 
 power_off:
-    ov5640_power(sensor, false);
-    regulator_bulk_disable(OV5640_NUM_SUPPLIES, sensor->supplies);
+    dscam6_power(sensor, false);
+    regulator_bulk_disable(DSCAM6_NUM_SUPPLIES, sensor->supplies);
 xclk_off:
     clk_disable_unprepare(sensor->xclk);
     return ret;
+#endif
 }
 
-static void ov5640_set_power_off(struct ov5640_dev *sensor)
-{
-    ov5640_power(sensor, false);
-    regulator_bulk_disable(OV5640_NUM_SUPPLIES, sensor->supplies);
+static void dscam6_set_power_off(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+#if 0 
+    dscam6_power(sensor, false);
+    regulator_bulk_disable(DSCAM6_NUM_SUPPLIES, sensor->supplies);
     clk_disable_unprepare(sensor->xclk);
+#endif
 }
 
-static int ov5640_set_power_mipi(struct ov5640_dev *sensor, bool on)
-{
+static int dscam6_set_power_mipi(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    csi_dev_dbg("on =%d\n", on);
+    return 0;
+#if 0 
     int ret;
 
     if (!on) {
         /* Reset MIPI bus settings to their default values. */
-        ov5640_write_reg(sensor, OV5640_REG_IO_MIPI_CTRL00, 0x58);
-        ov5640_write_reg(sensor, OV5640_REG_MIPI_CTRL00, 0x04);
-        ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT00, 0x00);
+        dscam6_write_reg(sensor, DSCAM6_REG_IO_MIPI_CTRL00, 0x58);
+        dscam6_write_reg(sensor, DSCAM6_REG_MIPI_CTRL00, 0x04);
+        dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT00, 0x00);
         return 0;
     }
 
@@ -2332,12 +2378,12 @@ static int ov5640_set_power_mipi(struct ov5640_dev *sensor, bool on)
      *
      * 0x300e = 0x40
      * [7:5] = 010  : 2 data lanes mode (see FIXME note in
-     *        "ov5640_set_stream_mipi()")
+     *        "dscam6_set_stream_mipi()")
      * [4] = 0  : Power up MIPI HS Tx
      * [3] = 0  : Power up MIPI LS Rx
      * [2] = 0  : MIPI interface disabled
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_IO_MIPI_CTRL00, 0x44);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_IO_MIPI_CTRL00, 0x44);
     if (ret)
         return ret;
 
@@ -2348,7 +2394,7 @@ static int ov5640_set_power_mipi(struct ov5640_dev *sensor, bool on)
      * [5] = 1  : Gate clock when 'no packets'
      * [2] = 1  : MIPI bus in LP11 when 'no packets'
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_MIPI_CTRL00, 0x24);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_MIPI_CTRL00, 0x24);
     if (ret)
         return ret;
 
@@ -2360,7 +2406,7 @@ static int ov5640_set_power_mipi(struct ov5640_dev *sensor, bool on)
      * [5] = 1  : MIPI data lane 1 in LP11 when 'sleeping'
      * [4] = 1  : MIPI clock lane in LP11 when 'sleeping'
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT00, 0x70);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT00, 0x70);
     if (ret)
         return ret;
 
@@ -2368,10 +2414,14 @@ static int ov5640_set_power_mipi(struct ov5640_dev *sensor, bool on)
     usleep_range(500, 1000);
 
     return 0;
+#endif
 }
 
-static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
-{
+static int dscam6_set_power_dvp(struct dscam6_dev *sensor, bool on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    csi_dev_dbg("on=%d \n", on);
+    return 0;
+#if 0 
     unsigned int flags = sensor->ep.bus.parallel.flags;
     bool bt656 = sensor->ep.bus_type == V4L2_MBUS_BT656;
     u8 polarities = 0;
@@ -2379,18 +2429,18 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
 
     if (!on) {
         /* Reset settings to their default values. */
-        ov5640_write_reg(sensor, OV5640_REG_CCIR656_CTRL00, 0x00);
-        ov5640_write_reg(sensor, OV5640_REG_IO_MIPI_CTRL00, 0x58);
-        ov5640_write_reg(sensor, OV5640_REG_POLARITY_CTRL00, 0x20);
-        ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT_ENABLE01, 0x00);
-        ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT_ENABLE02, 0x00);
+        dscam6_write_reg(sensor, DSCAM6_REG_CCIR656_CTRL00, 0x00);
+        dscam6_write_reg(sensor, DSCAM6_REG_IO_MIPI_CTRL00, 0x58);
+        dscam6_write_reg(sensor, DSCAM6_REG_POLARITY_CTRL00, 0x20);
+        dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT_ENABLE01, 0x00);
+        dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT_ENABLE02, 0x00);
         return 0;
     }
 
     /*
      * Note about parallel port configuration.
      *
-     * When configured in parallel mode, the OV5640 will
+     * When configured in parallel mode, the DSCAM6 will
      * output 10 bits data on DVP data lines [9:0].
      * If only 8 bits data are wanted, the 8 bits data lines
      * of the camera interface must be physically connected
@@ -2427,7 +2477,7 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
      * - blank toggle data 1'h040/1'h200
      * - clip reserved data (0x00 & 0xff changed to 0x01 & 0xfe)
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_CCIR656_CTRL00,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_CCIR656_CTRL00,
                    bt656 ? 0x01 : 0x00);
     if (ret)
         return ret;
@@ -2451,7 +2501,7 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
     if (flags & V4L2_MBUS_PCLK_SAMPLE_RISING)
         polarities |= BIT(5);
 
-    ret = ov5640_write_reg(sensor, OV5640_REG_POLARITY_CTRL00, polarities);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_POLARITY_CTRL00, polarities);
     if (ret)
         return ret;
 
@@ -2463,7 +2513,7 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
      * [3] = 1  : Power down MIPI LS Rx
      * [2] = 0  : DVP enable (MIPI disable)
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_IO_MIPI_CTRL00, 0x18);
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_IO_MIPI_CTRL00, 0x18);
     if (ret)
         return ret;
 
@@ -2477,7 +2527,7 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
      * - 4:     PCLK output enable
      * - [3:0]: D[9:6] output enable
      */
-    ret = ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT_ENABLE01,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT_ENABLE01,
                    bt656 ? 0x1f : 0x7f);
     if (ret)
         return ret;
@@ -2488,48 +2538,57 @@ static int ov5640_set_power_dvp(struct ov5640_dev *sensor, bool on)
      * PAD OUTPUT ENABLE 02
      * - [7:2]: D[5:0] output enable
      */
-    return ov5640_write_reg(sensor, OV5640_REG_PAD_OUTPUT_ENABLE02, 0xfc);
+    return dscam6_write_reg(sensor, DSCAM6_REG_PAD_OUTPUT_ENABLE02, 0xfc);
+#endif
 }
 
-static int ov5640_set_power(struct ov5640_dev *sensor, bool on)
-{
+static int dscam6_set_power(struct dscam6_dev *sensor, bool on) {
+
+    csi_dev_dbg("enter %s\n", __func__);
+    csi_dev_dbg("on=%d \n", on);
+    return 0;
+#if 0
     int ret = 0;
 
     if (on) {
-        ret = ov5640_set_power_on(sensor);
+        ret = dscam6_set_power_on(sensor);
         if (ret)
             return ret;
 
-        ret = ov5640_restore_mode(sensor);
+        ret = dscam6_restore_mode(sensor);
         if (ret)
             goto power_off;
     }
 
     if (sensor->ep.bus_type == V4L2_MBUS_CSI2_DPHY)
-        ret = ov5640_set_power_mipi(sensor, on);
+        ret = dscam6_set_power_mipi(sensor, on);
     else
-        ret = ov5640_set_power_dvp(sensor, on);
+        ret = dscam6_set_power_dvp(sensor, on);
     if (ret)
         goto power_off;
 
     if (!on)
-        ov5640_set_power_off(sensor);
+        dscam6_set_power_off(sensor);
 
     return 0;
 
 power_off:
-    ov5640_set_power_off(sensor);
+    dscam6_set_power_off(sensor);
     return ret;
+#endif
 }
 
 /* --------------- Subdev Operations --------------- */
 
-static int ov5640_s_power(struct v4l2_subdev *sd, int on)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+static int dscam6_s_power(struct v4l2_subdev *sd, int on) {
+    csi_dev_dbg("enter %s\n", __func__);
+    csi_dev_dbg("on=%d\n", on);
+    return 0;
+#if 0
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
     int ret = 0;
 
-    //printk("dscam6::ov5640_s_power on=%d\n",on);
+    //printk("dscam6::dscam6_s_power on=%d\n",on);
 
     mutex_lock(&sensor->lock);
 
@@ -2540,16 +2599,16 @@ static int ov5640_s_power(struct v4l2_subdev *sd, int on)
 
     // %DS%
     // if (sensor->power_count == !on) {
-    //     ret = ov5640_set_power(sensor, !!on);
+    //     ret = dscam6_set_power(sensor, !!on);
     //     if (ret)
     //         goto out;
     // }
 
-    //printk("dscam6::ov5640_s_power 1::power_count=%d\n", sensor->power_count);
+    //printk("dscam6::dscam6_s_power 1::power_count=%d\n", sensor->power_count);
     /* Update the power count. */
     sensor->power_count += on ? 1 : -1;
     WARN_ON(sensor->power_count < 0);
-    //printk("dscam6::ov5640_s_power 2::power_count=%d\n", sensor->power_count);
+    //printk("dscam6::dscam6_s_power 2::power_count=%d\n", sensor->power_count);
 out:
     mutex_unlock(&sensor->lock);
 
@@ -2558,27 +2617,25 @@ out:
         ret = v4l2_ctrl_handler_setup(&sensor->ctrls.handler);
     }
 
-    printk("dscam6::ov5640_s_power::on=%d,power_count=%d\n", on, sensor->power_count);
+    printk("dscam6::dscam6_s_power::on=%d,power_count=%d\n", on, sensor->power_count);
 
     // %DS%
     return 0;
+#endif
 }
 
-static int ov5640_try_frame_interval(struct ov5640_dev *sensor,
-                     struct v4l2_fract *fi,
-                     u32 width, u32 height)
-{
-    const struct ov5640_mode_info *mode;
-    enum ov5640_frame_rate rate = OV5640_15_FPS;
+static int dscam6_try_frame_interval(struct dscam6_dev *sensor, struct v4l2_fract *fi, u32 width, u32 height) {
+    const struct dscam6_mode_info *mode;
+    enum dscam6_frame_rate rate = DSCAM6_15_FPS;
     int minfps, maxfps, best_fps, fps;
     int i;
 
-    mode = ov5640_find_mode(sensor, width, height, false);
+    mode = dscam6_find_mode(sensor, width, height, false);
     if (!mode)
         return -EINVAL;
 
-    minfps = ov5640_framerates[OV5640_15_FPS];
-    maxfps = ov5640_framerates[mode->max_fps];
+    minfps = dscam6_framerates[DSCAM6_15_FPS];
+    maxfps = dscam6_framerates[mode->max_fps];
 
     if (fi->numerator == 0) {
         fi->denominator = maxfps;
@@ -2587,12 +2644,11 @@ static int ov5640_try_frame_interval(struct ov5640_dev *sensor,
         goto find_mode;
     }
 
-    fps = clamp_val(DIV_ROUND_CLOSEST(fi->denominator, fi->numerator),
-            minfps, maxfps);
+    fps = clamp_val(DIV_ROUND_CLOSEST(fi->denominator, fi->numerator), minfps, maxfps);
 
     best_fps = minfps;
-    for (i = 0; i < ARRAY_SIZE(ov5640_framerates); i++) {
-        int curr_fps = ov5640_framerates[i];
+    for (i = 0; i < ARRAY_SIZE(dscam6_framerates); i++) {
+        int curr_fps = dscam6_framerates[i];
 
         if (abs(curr_fps - fps) < abs(best_fps - fps)) {
             best_fps = curr_fps;
@@ -2604,15 +2660,12 @@ static int ov5640_try_frame_interval(struct ov5640_dev *sensor,
     fi->denominator = best_fps;
 
 find_mode:
-    mode = ov5640_find_mode(sensor, width, height, false);
+    mode = dscam6_find_mode(sensor, width, height, false);
     return mode ? rate : -EINVAL;
 }
 
-static int ov5640_get_fmt(struct v4l2_subdev *sd,
-              struct v4l2_subdev_state *sd_state,
-              struct v4l2_subdev_format *format)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+static int dscam6_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_format *format) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
     struct v4l2_mbus_framefmt *fmt;
 
     if (format->pad != 0)
@@ -2621,33 +2674,29 @@ static int ov5640_get_fmt(struct v4l2_subdev *sd,
     mutex_lock(&sensor->lock);
 
     if (format->which == V4L2_SUBDEV_FORMAT_TRY)
-        fmt = v4l2_subdev_get_try_format(&sensor->sd, sd_state,
-                         format->pad);
+        fmt = v4l2_subdev_get_try_format(&sensor->sd, sd_state, format->pad);
     else
         fmt = &sensor->fmt;
 
-    fmt->reserved[1] = (sensor->current_fr == OV5640_30_FPS) ? 30 : 15;
+    fmt->reserved[1] = (sensor->current_fr == DSCAM6_30_FPS) ? 30 : 15;
     format->format = *fmt;
 
     mutex_unlock(&sensor->lock);
     return 0;
 }
 
-static int ov5640_try_fmt_internal(struct v4l2_subdev *sd,
-                   struct v4l2_mbus_framefmt *fmt,
-                   enum ov5640_frame_rate fr,
-                   const struct ov5640_mode_info **new_mode)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_mode_info *mode;
-    const struct ov5640_pixfmt *pixfmt;
+static int dscam6_try_fmt_internal(struct v4l2_subdev *sd, struct v4l2_mbus_framefmt *fmt, enum dscam6_frame_rate fr,
+                                   const struct dscam6_mode_info **new_mode) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_mode_info *mode;
+    const struct dscam6_pixfmt *pixfmt;
     unsigned int bpp;
 
-    mode = ov5640_find_mode(sensor, fmt->width, fmt->height, true);
+    mode = dscam6_find_mode(sensor, fmt->width, fmt->height, true);
     if (!mode)
         return -EINVAL;
 
-    pixfmt = ov5640_code_to_pixfmt(sensor, fmt->code);
+    pixfmt = dscam6_code_to_pixfmt(sensor, fmt->code);
     bpp = pixfmt->bpp;
 
     /*
@@ -2656,9 +2705,9 @@ static int ov5640_try_fmt_internal(struct v4l2_subdev *sd,
      * - 24bpp modes work resolution < 1280x720
      */
     if (bpp == 8 && mode->width < 1280)
-        mode = &ov5640_mode_data[OV5640_MODE_720P_1280_720];
+        mode = &dscam6_mode_data[DSCAM6_MODE_720P_1280_720];
     else if (bpp == 24 && mode->width > 1024)
-        mode = &ov5640_mode_data[OV5640_MODE_XGA_1024_768];
+        mode = &dscam6_mode_data[DSCAM6_MODE_XGA_1024_768];
 
     fmt->width = mode->width;
     fmt->height = mode->height;
@@ -2675,22 +2724,26 @@ static int ov5640_try_fmt_internal(struct v4l2_subdev *sd,
     return 0;
 }
 
-static void __v4l2_ctrl_vblank_update(struct ov5640_dev *sensor, u32 vblank)
-{
-    const struct ov5640_mode_info *mode = sensor->current_mode;
+static void __v4l2_ctrl_vblank_update(struct dscam6_dev *sensor, u32 vblank) {
+    csi_dev_dbg("enter %s\n", __func__);
+#if 0 
+    const struct dscam6_mode_info *mode = sensor->current_mode;
 
-    __v4l2_ctrl_modify_range(sensor->ctrls.vblank, OV5640_MIN_VBLANK,
-                 OV5640_MAX_VTS - mode->height, 1, vblank);
+    __v4l2_ctrl_modify_range(sensor->ctrls.vblank, DSCAM6_MIN_VBLANK,
+                 DSCAM6_MAX_VTS - mode->height, 1, vblank);
 
     __v4l2_ctrl_s_ctrl(sensor->ctrls.vblank, vblank);
+#endif
 }
 
-static int ov5640_update_pixel_rate(struct ov5640_dev *sensor)
-{
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    enum ov5640_pixel_rate_id pixel_rate_id = mode->pixel_rate;
+static int dscam6_update_pixel_rate(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    enum dscam6_pixel_rate_id pixel_rate_id = mode->pixel_rate;
     struct v4l2_mbus_framefmt *fmt = &sensor->fmt;
-    const struct ov5640_timings *timings = ov5640_timings(sensor, mode);
+    const struct dscam6_timings *timings = dscam6_timings(sensor, mode);
     s32 exposure_val, exposure_max;
     unsigned int hblank;
     unsigned int i = 0;
@@ -2705,9 +2758,9 @@ static int ov5640_update_pixel_rate(struct ov5640_dev *sensor)
      *
      * For DVP mode, maintain the pixel rate calculation using fixed FPS.
      */
-    if (!ov5640_is_csi2(sensor)) {
+    if (!dscam6_is_csi2(sensor)) {
         __v4l2_ctrl_s_ctrl_int64(sensor->ctrls.pixel_rate,
-                     ov5640_calc_pixel_rate(sensor));
+                     dscam6_calc_pixel_rate(sensor));
 
         __v4l2_ctrl_vblank_update(sensor, timings->vblank_def);
 
@@ -2722,20 +2775,20 @@ static int ov5640_update_pixel_rate(struct ov5640_dev *sensor)
      * progressively slow it down if it exceeds 1GHz.
      */
     num_lanes = sensor->ep.bus.mipi_csi2.num_data_lanes;
-    bpp = ov5640_code_to_bpp(sensor, fmt->code);
+    bpp = dscam6_code_to_bpp(sensor, fmt->code);
     do {
-        pixel_rate = ov5640_pixel_rates[pixel_rate_id];
+        pixel_rate = dscam6_pixel_rates[pixel_rate_id];
         link_freq = pixel_rate * bpp / (2 * num_lanes);
     } while (link_freq >= 1000000000U &&
-         ++pixel_rate_id < OV5640_NUM_PIXEL_RATES);
+         ++pixel_rate_id < DSCAM6_NUM_PIXEL_RATES);
 
     sensor->current_link_freq = link_freq;
 
-    for (i = 0; i < ARRAY_SIZE(ov5640_csi2_link_freqs); ++i) {
-        if (ov5640_csi2_link_freqs[i] == link_freq)
+    for (i = 0; i < ARRAY_SIZE(dscam6_csi2_link_freqs); ++i) {
+        if (dscam6_csi2_link_freqs[i] == link_freq)
             break;
     }
-    WARN_ON(i == ARRAY_SIZE(ov5640_csi2_link_freqs));
+    WARN_ON(i == ARRAY_SIZE(dscam6_csi2_link_freqs));
     sensor->current_link_freq_id = i;
 
     __v4l2_ctrl_s_ctrl_int64(sensor->ctrls.pixel_rate, pixel_rate);
@@ -2771,18 +2824,16 @@ static int ov5640_update_pixel_rate(struct ov5640_dev *sensor)
                  exposure_max, 1, exposure_val);
 
     return 0;
+#endif
 }
 
-static int ov5640_set_fmt(struct v4l2_subdev *sd,
-              struct v4l2_subdev_state *sd_state,
-              struct v4l2_subdev_format *format)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_mode_info *new_mode;
+static int dscam6_set_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_format *format) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_mode_info *new_mode;
     struct v4l2_mbus_framefmt *mbus_fmt = &format->format;
     int ret;
 
-    printk("dscam6::ov5640_set_fmt\n");
+    printk("dscam6::dscam6_set_fmt\n");
 
     if (format->pad != 0)
         return -EINVAL;
@@ -2794,8 +2845,7 @@ static int ov5640_set_fmt(struct v4l2_subdev *sd,
         goto out;
     }
 
-    ret = ov5640_try_fmt_internal(sd, mbus_fmt,
-                      sensor->current_fr, &new_mode);
+    ret = dscam6_try_fmt_internal(sd, mbus_fmt, sensor->current_fr, &new_mode);
     if (ret)
         goto out;
 
@@ -2815,25 +2865,23 @@ static int ov5640_set_fmt(struct v4l2_subdev *sd,
     /* update format even if code is unchanged, resolution might change */
     sensor->fmt = *mbus_fmt;
 
-    ov5640_update_pixel_rate(sensor);
+    dscam6_update_pixel_rate(sensor);
 
 out:
     mutex_unlock(&sensor->lock);
     return ret;
 }
 
-static int ov5640_get_selection(struct v4l2_subdev *sd,
-                struct v4l2_subdev_state *sd_state,
-                struct v4l2_subdev_selection *sel)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    const struct ov5640_timings *timings;
+static int dscam6_get_selection(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_selection *sel) {
+#if 0 
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    const struct dscam6_timings *timings;
 
     switch (sel->target) {
     case V4L2_SEL_TGT_CROP: {
         mutex_lock(&sensor->lock);
-        timings = ov5640_timings(sensor, mode);
+        timings = dscam6_timings(sensor, mode);
         sel->r = timings->analog_crop;
         mutex_unlock(&sensor->lock);
 
@@ -2844,40 +2892,42 @@ static int ov5640_get_selection(struct v4l2_subdev *sd,
     case V4L2_SEL_TGT_CROP_BOUNDS:
         sel->r.top = 0;
         sel->r.left = 0;
-        sel->r.width = OV5640_NATIVE_WIDTH;
-        sel->r.height = OV5640_NATIVE_HEIGHT;
+        sel->r.width = DSCAM6_NATIVE_WIDTH;
+        sel->r.height = DSCAM6_NATIVE_HEIGHT;
 
         return 0;
 
     case V4L2_SEL_TGT_CROP_DEFAULT:
-        sel->r.top = OV5640_PIXEL_ARRAY_TOP;
-        sel->r.left = OV5640_PIXEL_ARRAY_LEFT;
-        sel->r.width = OV5640_PIXEL_ARRAY_WIDTH;
-        sel->r.height = OV5640_PIXEL_ARRAY_HEIGHT;
+        sel->r.top = DSCAM6_PIXEL_ARRAY_TOP;
+        sel->r.left = DSCAM6_PIXEL_ARRAY_LEFT;
+        sel->r.width = DSCAM6_PIXEL_ARRAY_WIDTH;
+        sel->r.height = DSCAM6_PIXEL_ARRAY_HEIGHT;
 
         return 0;
     }
+#endif
 
     return -EINVAL;
 }
 
-static int ov5640_set_framefmt(struct ov5640_dev *sensor,
-                   struct v4l2_mbus_framefmt *format)
-{
+static int dscam6_set_framefmt(struct dscam6_dev *sensor, struct v4l2_mbus_framefmt *format) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     bool is_jpeg = format->code == MEDIA_BUS_FMT_JPEG_1X8;
-    const struct ov5640_pixfmt *pixfmt;
+    const struct dscam6_pixfmt *pixfmt;
     int ret = 0;
 
-    pixfmt = ov5640_code_to_pixfmt(sensor, format->code);
+    pixfmt = dscam6_code_to_pixfmt(sensor, format->code);
 
     /* FORMAT CONTROL00: YUV and RGB formatting */
-    ret = ov5640_write_reg(sensor, OV5640_REG_FORMAT_CONTROL00,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_FORMAT_CONTROL00,
                    pixfmt->ctrl00);
     if (ret)
         return ret;
 
     /* FORMAT MUX CONTROL: ISP YUV or RGB */
-    ret = ov5640_write_reg(sensor, OV5640_REG_ISP_FORMAT_MUX_CTRL,
+    ret = dscam6_write_reg(sensor, DSCAM6_REG_ISP_FORMAT_MUX_CTRL,
                    pixfmt->mux);
     if (ret)
         return ret;
@@ -2886,7 +2936,7 @@ static int ov5640_set_framefmt(struct ov5640_dev *sensor,
      * TIMING TC REG21:
      * - [5]:   JPEG enable
      */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_TIMING_TC_REG21,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_TIMING_TC_REG21,
                  BIT(5), is_jpeg ? BIT(5) : 0);
     if (ret)
         return ret;
@@ -2897,7 +2947,7 @@ static int ov5640_set_framefmt(struct ov5640_dev *sensor,
      * - [3]:   Reset SFIFO
      * - [2]:   Reset JPEG
      */
-    ret = ov5640_mod_reg(sensor, OV5640_REG_SYS_RESET02,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_SYS_RESET02,
                  BIT(4) | BIT(3) | BIT(2),
                  is_jpeg ? 0 : (BIT(4) | BIT(3) | BIT(2)));
     if (ret)
@@ -2908,77 +2958,93 @@ static int ov5640_set_framefmt(struct ov5640_dev *sensor,
      * - [5]:   Enable JPEG 2x clock
      * - [3]:   Enable JPEG clock
      */
-    return ov5640_mod_reg(sensor, OV5640_REG_SYS_CLOCK_ENABLE02,
+    return dscam6_mod_reg(sensor, DSCAM6_REG_SYS_CLOCK_ENABLE02,
                   BIT(5) | BIT(3),
                   is_jpeg ? (BIT(5) | BIT(3)) : 0);
+#endif
 }
 
 /*
  * Sensor Controls.
  */
 
-static int ov5640_set_ctrl_hue(struct ov5640_dev *sensor, int value)
+#if 0
+static int dscam6_set_ctrl_hue(struct dscam6_dev *sensor, int value)
 {
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
     int ret;
 
     if (value) {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0,
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0,
                      BIT(0), BIT(0));
         if (ret)
             return ret;
-        ret = ov5640_write_reg16(sensor, OV5640_REG_SDE_CTRL1, value);
+        ret = dscam6_write_reg16(sensor, DSCAM6_REG_SDE_CTRL1, value);
     } else {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0, BIT(0), 0);
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0, BIT(0), 0);
     }
 
     return ret;
 }
+#endif
 
-static int ov5640_set_ctrl_contrast(struct ov5640_dev *sensor, int value)
+#if 0 
+static int dscam6_set_ctrl_contrast(struct dscam6_dev *sensor, int value)
 {
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
     int ret;
 
     if (value) {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0,
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0,
                      BIT(2), BIT(2));
         if (ret)
             return ret;
-        ret = ov5640_write_reg(sensor, OV5640_REG_SDE_CTRL5,
+        ret = dscam6_write_reg(sensor, DSCAM6_REG_SDE_CTRL5,
                        value & 0xff);
     } else {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0, BIT(2), 0);
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0, BIT(2), 0);
     }
 
     return ret;
 }
+#endif
 
-static int ov5640_set_ctrl_saturation(struct ov5640_dev *sensor, int value)
+#if 0
+static int dscam6_set_ctrl_saturation(struct dscam6_dev *sensor, int value)
 {
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
     int ret;
 
     if (value) {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0,
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0,
                      BIT(1), BIT(1));
         if (ret)
             return ret;
-        ret = ov5640_write_reg(sensor, OV5640_REG_SDE_CTRL3,
+        ret = dscam6_write_reg(sensor, DSCAM6_REG_SDE_CTRL3,
                        value & 0xff);
         if (ret)
             return ret;
-        ret = ov5640_write_reg(sensor, OV5640_REG_SDE_CTRL4,
+        ret = dscam6_write_reg(sensor, DSCAM6_REG_SDE_CTRL4,
                        value & 0xff);
     } else {
-        ret = ov5640_mod_reg(sensor, OV5640_REG_SDE_CTRL0, BIT(1), 0);
+        ret = dscam6_mod_reg(sensor, DSCAM6_REG_SDE_CTRL0, BIT(1), 0);
     }
 
     return ret;
 }
 
-static int ov5640_set_ctrl_white_balance(struct ov5640_dev *sensor, int awb)
+#endif
+#if 0
+static int dscam6_set_ctrl_white_balance(struct dscam6_dev *sensor, int awb)
 {
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
     int ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_AWB_MANUAL_CTRL,
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_AWB_MANUAL_CTRL,
                  BIT(0), awb ? 0 : 1);
     if (ret)
         return ret;
@@ -2987,24 +3053,29 @@ static int ov5640_set_ctrl_white_balance(struct ov5640_dev *sensor, int awb)
         u16 red = (u16)sensor->ctrls.red_balance->val;
         u16 blue = (u16)sensor->ctrls.blue_balance->val;
 
-        ret = ov5640_write_reg16(sensor, OV5640_REG_AWB_R_GAIN, red);
+        ret = dscam6_write_reg16(sensor, DSCAM6_REG_AWB_R_GAIN, red);
         if (ret)
             return ret;
-        ret = ov5640_write_reg16(sensor, OV5640_REG_AWB_B_GAIN, blue);
+        ret = dscam6_write_reg16(sensor, DSCAM6_REG_AWB_B_GAIN, blue);
     }
 
     return ret;
-}
 
-static int ov5640_set_ctrl_exposure(struct ov5640_dev *sensor,
+}
+#endif
+
+#if 0
+static int dscam6_set_ctrl_exposure(struct dscam6_dev *sensor,
                     enum v4l2_exposure_auto_type auto_exposure)
 {
-    struct ov5640_ctrls *ctrls = &sensor->ctrls;
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
+    struct dscam6_ctrls *ctrls = &sensor->ctrls;
     bool auto_exp = (auto_exposure == V4L2_EXPOSURE_AUTO);
     int ret = 0;
 
     if (ctrls->auto_exp->is_new) {
-        ret = ov5640_set_autoexposure(sensor, auto_exp);
+        ret = dscam6_set_autoexposure(sensor, auto_exp);
         if (ret)
             return ret;
     }
@@ -3012,40 +3083,47 @@ static int ov5640_set_ctrl_exposure(struct ov5640_dev *sensor,
     if (!auto_exp && ctrls->exposure->is_new) {
         u16 max_exp;
 
-        ret = ov5640_read_reg16(sensor, OV5640_REG_AEC_PK_VTS,
+        ret = dscam6_read_reg16(sensor, DSCAM6_REG_AEC_PK_VTS,
                     &max_exp);
         if (ret)
             return ret;
-        ret = ov5640_get_vts(sensor);
+        ret = dscam6_get_vts(sensor);
         if (ret < 0)
             return ret;
         max_exp += ret;
         ret = 0;
 
         if (ctrls->exposure->val < max_exp)
-            ret = ov5640_set_exposure(sensor, ctrls->exposure->val);
+            ret = dscam6_set_exposure(sensor, ctrls->exposure->val);
     }
 
     return ret;
 }
+#endif
 
-static int ov5640_set_ctrl_gain(struct ov5640_dev *sensor, bool auto_gain)
+#if 0 
+static int dscam6_set_ctrl_gain(struct dscam6_dev *sensor, bool auto_gain)
 {
-    struct ov5640_ctrls *ctrls = &sensor->ctrls;
+    csi_dev_dbg("on=%d\n",__func__);
+    return 0;
+
+    struct dscam6_ctrls *ctrls = &sensor->ctrls;
     int ret = 0;
 
     if (ctrls->auto_gain->is_new) {
-        ret = ov5640_set_autogain(sensor, auto_gain);
+        ret = dscam6_set_autogain(sensor, auto_gain);
         if (ret)
             return ret;
     }
 
     if (!auto_gain && ctrls->gain->is_new)
-        ret = ov5640_set_gain(sensor, ctrls->gain->val);
+        ret = dscam6_set_gain(sensor, ctrls->gain->val);
 
     return ret;
 }
+#endif
 
+#if 0
 static const char * const test_pattern_menu[] = {
     "Disabled",
     "Color bars",
@@ -3054,51 +3132,51 @@ static const char * const test_pattern_menu[] = {
     "Color squares w/ rolling bar",
 };
 
-#define OV5640_TEST_ENABLE      BIT(7)
-#define OV5640_TEST_ROLLING     BIT(6)  /* rolling horizontal bar */
-#define OV5640_TEST_TRANSPARENT     BIT(5)
-#define OV5640_TEST_SQUARE_BW       BIT(4)  /* black & white squares */
-#define OV5640_TEST_BAR_STANDARD    (0 << 2)
-#define OV5640_TEST_BAR_VERT_CHANGE_1   (1 << 2)
-#define OV5640_TEST_BAR_HOR_CHANGE  (2 << 2)
-#define OV5640_TEST_BAR_VERT_CHANGE_2   (3 << 2)
-#define OV5640_TEST_BAR         (0 << 0)
-#define OV5640_TEST_RANDOM      (1 << 0)
-#define OV5640_TEST_SQUARE      (2 << 0)
-#define OV5640_TEST_BLACK       (3 << 0)
+#define DSCAM6_TEST_ENABLE BIT(7)
+#define DSCAM6_TEST_ROLLING BIT(6) /* rolling horizontal bar */
+#define DSCAM6_TEST_TRANSPARENT BIT(5)
+#define DSCAM6_TEST_SQUARE_BW BIT(4) /* black & white squares */
+#define DSCAM6_TEST_BAR_STANDARD (0 << 2)
+#define DSCAM6_TEST_BAR_VERT_CHANGE_1 (1 << 2)
+#define DSCAM6_TEST_BAR_HOR_CHANGE (2 << 2)
+#define DSCAM6_TEST_BAR_VERT_CHANGE_2 (3 << 2)
+#define DSCAM6_TEST_BAR (0 << 0)
+#define DSCAM6_TEST_RANDOM (1 << 0)
+#define DSCAM6_TEST_SQUARE (2 << 0)
+#define DSCAM6_TEST_BLACK (3 << 0)
 
 static const u8 test_pattern_val[] = {
     0,
-    OV5640_TEST_ENABLE | OV5640_TEST_BAR_VERT_CHANGE_1 |
-        OV5640_TEST_BAR,
-    OV5640_TEST_ENABLE | OV5640_TEST_ROLLING |
-        OV5640_TEST_BAR_VERT_CHANGE_1 | OV5640_TEST_BAR,
-    OV5640_TEST_ENABLE | OV5640_TEST_SQUARE,
-    OV5640_TEST_ENABLE | OV5640_TEST_ROLLING | OV5640_TEST_SQUARE,
+    DSCAM6_TEST_ENABLE | DSCAM6_TEST_BAR_VERT_CHANGE_1 |
+        DSCAM6_TEST_BAR,
+    DSCAM6_TEST_ENABLE | DSCAM6_TEST_ROLLING |
+        DSCAM6_TEST_BAR_VERT_CHANGE_1 | DSCAM6_TEST_BAR,
+    DSCAM6_TEST_ENABLE | DSCAM6_TEST_SQUARE,
+    DSCAM6_TEST_ENABLE | DSCAM6_TEST_ROLLING | DSCAM6_TEST_SQUARE,
 };
 
-static int ov5640_set_ctrl_test_pattern(struct ov5640_dev *sensor, int value)
+static int dscam6_set_ctrl_test_pattern(struct dscam6_dev *sensor, int value)
 {
-    return ov5640_write_reg(sensor, OV5640_REG_PRE_ISP_TEST_SET1,
+    return dscam6_write_reg(sensor, DSCAM6_REG_PRE_ISP_TEST_SET1,
                 test_pattern_val[value]);
 }
 
-static int ov5640_set_ctrl_light_freq(struct ov5640_dev *sensor, int value)
+static int dscam6_set_ctrl_light_freq(struct dscam6_dev *sensor, int value)
 {
     int ret;
 
-    ret = ov5640_mod_reg(sensor, OV5640_REG_HZ5060_CTRL01, BIT(7),
+    ret = dscam6_mod_reg(sensor, DSCAM6_REG_HZ5060_CTRL01, BIT(7),
                  (value == V4L2_CID_POWER_LINE_FREQUENCY_AUTO) ?
                  0 : BIT(7));
     if (ret)
         return ret;
 
-    return ov5640_mod_reg(sensor, OV5640_REG_HZ5060_CTRL00, BIT(2),
+    return dscam6_mod_reg(sensor, DSCAM6_REG_HZ5060_CTRL00, BIT(2),
                   (value == V4L2_CID_POWER_LINE_FREQUENCY_50HZ) ?
                   BIT(2) : 0);
 }
 
-static int ov5640_set_ctrl_hflip(struct ov5640_dev *sensor, int value)
+static int dscam6_set_ctrl_hflip(struct dscam6_dev *sensor, int value)
 {
     /*
      * If sensor is mounted upside down, mirror logic is inversed.
@@ -3114,13 +3192,13 @@ static int ov5640_set_ctrl_hflip(struct ov5640_dev *sensor, int value)
      * - [2]:   ISP mirror
      * - [1]:   Sensor mirror
      */
-    return ov5640_mod_reg(sensor, OV5640_REG_TIMING_TC_REG21,
+    return dscam6_mod_reg(sensor, DSCAM6_REG_TIMING_TC_REG21,
                   BIT(2) | BIT(1),
                   (!(value ^ sensor->upside_down)) ?
                   (BIT(2) | BIT(1)) : 0);
 }
 
-static int ov5640_set_ctrl_vflip(struct ov5640_dev *sensor, int value)
+static int dscam6_set_ctrl_vflip(struct dscam6_dev *sensor, int value)
 {
     /* If sensor is mounted upside down, flip logic is inversed */
 
@@ -3129,79 +3207,80 @@ static int ov5640_set_ctrl_vflip(struct ov5640_dev *sensor, int value)
      * - [2]:   ISP vflip
      * - [1]:   Sensor vflip
      */
-    return ov5640_mod_reg(sensor, OV5640_REG_TIMING_TC_REG20,
+    return dscam6_mod_reg(sensor, DSCAM6_REG_TIMING_TC_REG20,
                   BIT(2) | BIT(1),
                   (value ^ sensor->upside_down) ?
                   (BIT(2) | BIT(1)) : 0);
 }
 
-static int ov5640_set_ctrl_vblank(struct ov5640_dev *sensor, int value)
+static int dscam6_set_ctrl_vblank(struct dscam6_dev *sensor, int value)
 {
-    const struct ov5640_mode_info *mode = sensor->current_mode;
+    const struct dscam6_mode_info *mode = sensor->current_mode;
 
     /* Update the VTOT timing register value. */
-    return ov5640_write_reg16(sensor, OV5640_REG_TIMING_VTS,
+    return dscam6_write_reg16(sensor, DSCAM6_REG_TIMING_VTS,
                   mode->height + value);
 }
+#endif
 
-static int ov5640_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
-{
+static int dscam6_g_volatile_ctrl(struct v4l2_ctrl *ctrl) {
     struct v4l2_subdev *sd = ctrl_to_sd(ctrl);
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
     int val;
 
+    csi_dev_dbg("enter %s\n", __func__);
     /* v4l2_ctrl_lock() locks our own mutex */
 
     switch (ctrl->id) {
     case V4L2_CID_AUTOGAIN:
-        val = ov5640_get_gain(sensor);
-        if (val < 0)
-            return val;
-        sensor->ctrls.gain->val = val;
+        // val = dscam6_get_gain(sensor);
+        // if (val < 0)
+        //     return val;
+        // sensor->ctrls.gain->val = val;
         break;
     case V4L2_CID_EXPOSURE_AUTO:
-        val = ov5640_get_exposure(sensor);
-        if (val < 0)
-            return val;
-        sensor->ctrls.exposure->val = val;
+        // val = dscam6_get_exposure(sensor);
+        // if (val < 0)
+        //     return val;
+        // sensor->ctrls.exposure->val = val;
         break;
     case V4L2_CID_PIXEL_RATE:
-        val = sensor->current_mode->pixel_rate;
-        dev_info(&sensor->i2c_client->dev, "get pixel rate: %d Hz id=%d\n",
-            (int) ov5640_pixel_rates[val], val);
-        sensor->ctrls.pixel_rate->val = val;
+        // val = sensor->current_mode->pixel_rate;
+        // dev_info(&sensor->i2c_client->dev, "get pixel rate: %d Hz id=%d\n",
+        //     (int) dscam6_pixel_rates[val], val);
+        // sensor->ctrls.pixel_rate->val = val;
         break;
     case V4L2_CID_LINK_FREQ:
-        val = sensor->current_link_freq_id;
-        dev_info(&sensor->i2c_client->dev, "get link frequency: %d Hz id=%d\n",
-            (int) sensor->current_link_freq, val);
-        sensor->ctrls.link_freq->val = val;
+        // val = sensor->current_link_freq_id;
+        // dev_info(&sensor->i2c_client->dev, "get link frequency: %d Hz id=%d\n",
+        //     (int) sensor->current_link_freq, val);
+        // sensor->ctrls.link_freq->val = val;
         break;
     }
 
     return 0;
 }
 
-static int ov5640_s_ctrl(struct v4l2_ctrl *ctrl)
-{
+static int dscam6_s_ctrl(struct v4l2_ctrl *ctrl) {
     struct v4l2_subdev *sd = ctrl_to_sd(ctrl);
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    const struct ov5640_timings *timings;
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    const struct dscam6_timings *timings;
     unsigned int exp_max;
     int ret;
+    csi_dev_dbg("enter %s\n", __func__);
 
     /* v4l2_ctrl_lock() locks our own mutex */
 
     switch (ctrl->id) {
     case V4L2_CID_VBLANK:
         /* Update the exposure range to the newly programmed vblank. */
-        timings = ov5640_timings(sensor, mode);
-        exp_max = mode->height + ctrl->val - 4;
-        __v4l2_ctrl_modify_range(sensor->ctrls.exposure,
-                     sensor->ctrls.exposure->minimum,
-                     exp_max, sensor->ctrls.exposure->step,
-                     timings->vblank_def);
+        // timings = dscam6_timings(sensor, mode);
+        // exp_max = mode->height + ctrl->val - 4;
+        // __v4l2_ctrl_modify_range(sensor->ctrls.exposure,
+        //              sensor->ctrls.exposure->minimum,
+        //              exp_max, sensor->ctrls.exposure->step,
+        //              timings->vblank_def);
         break;
     }
 
@@ -3215,37 +3294,37 @@ static int ov5640_s_ctrl(struct v4l2_ctrl *ctrl)
 
     switch (ctrl->id) {
     case V4L2_CID_AUTOGAIN:
-        ret = ov5640_set_ctrl_gain(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_gain(sensor, ctrl->val);
         break;
     case V4L2_CID_EXPOSURE_AUTO:
-        ret = ov5640_set_ctrl_exposure(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_exposure(sensor, ctrl->val);
         break;
     case V4L2_CID_AUTO_WHITE_BALANCE:
-        ret = ov5640_set_ctrl_white_balance(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_white_balance(sensor, ctrl->val);
         break;
     case V4L2_CID_HUE:
-        ret = ov5640_set_ctrl_hue(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_hue(sensor, ctrl->val);
         break;
     case V4L2_CID_CONTRAST:
-        ret = ov5640_set_ctrl_contrast(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_contrast(sensor, ctrl->val);
         break;
     case V4L2_CID_SATURATION:
-        ret = ov5640_set_ctrl_saturation(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_saturation(sensor, ctrl->val);
         break;
     case V4L2_CID_TEST_PATTERN:
-        ret = ov5640_set_ctrl_test_pattern(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_test_pattern(sensor, ctrl->val);
         break;
     case V4L2_CID_POWER_LINE_FREQUENCY:
-        ret = ov5640_set_ctrl_light_freq(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_light_freq(sensor, ctrl->val);
         break;
     case V4L2_CID_HFLIP:
-        ret = ov5640_set_ctrl_hflip(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_hflip(sensor, ctrl->val);
         break;
     case V4L2_CID_VFLIP:
-        ret = ov5640_set_ctrl_vflip(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_vflip(sensor, ctrl->val);
         break;
     case V4L2_CID_VBLANK:
-        ret = ov5640_set_ctrl_vblank(sensor, ctrl->val);
+        // ret = dscam6_set_ctrl_vblank(sensor, ctrl->val);
         break;
     default:
         ret = -EINVAL;
@@ -3255,91 +3334,91 @@ static int ov5640_s_ctrl(struct v4l2_ctrl *ctrl)
     return ret;
 }
 
-static const struct v4l2_ctrl_ops ov5640_ctrl_ops = {
-    .g_volatile_ctrl = ov5640_g_volatile_ctrl,
-    .s_ctrl = ov5640_s_ctrl,
+static const struct v4l2_ctrl_ops dscam6_ctrl_ops = {
+    .g_volatile_ctrl = dscam6_g_volatile_ctrl,
+    .s_ctrl = dscam6_s_ctrl,
 };
 
-static int ov5640_init_controls(struct ov5640_dev *sensor)
-{
-    const struct ov5640_mode_info *mode = sensor->current_mode;
-    const struct v4l2_ctrl_ops *ops = &ov5640_ctrl_ops;
-    struct ov5640_ctrls *ctrls = &sensor->ctrls;
+static int dscam6_init_controls(struct dscam6_dev *sensor) {
+    const struct dscam6_mode_info *mode = sensor->current_mode;
+    const struct v4l2_ctrl_ops *ops = &dscam6_ctrl_ops;
+    struct dscam6_ctrls *ctrls = &sensor->ctrls;
     struct v4l2_ctrl_handler *hdl = &ctrls->handler;
     struct v4l2_fwnode_device_properties props;
-    const struct ov5640_timings *timings;
+    const struct dscam6_timings *timings;
     unsigned int max_vblank;
     unsigned int hblank;
     int ret;
 
+    csi_dev_dbg("enter %s\n", __func__);
     v4l2_ctrl_handler_init(hdl, 32);
 
     /* we can use our own mutex for the ctrl lock */
     hdl->lock = &sensor->lock;
 
     /* Clock related controls */
-    ctrls->pixel_rate = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_PIXEL_RATE,
-                  ov5640_pixel_rates[OV5640_NUM_PIXEL_RATES - 1],
-                  ov5640_pixel_rates[0], 1,
-                  ov5640_pixel_rates[mode->pixel_rate]);
+    // ctrls->pixel_rate = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_PIXEL_RATE,
+    //               dscam6_pixel_rates[DSCAM6_NUM_PIXEL_RATES - 1],
+    //               dscam6_pixel_rates[0], 1,
+    //               dscam6_pixel_rates[mode->pixel_rate]);
 
-    ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops,
-                    V4L2_CID_LINK_FREQ,
-                    ARRAY_SIZE(ov5640_csi2_link_freqs) - 1,
-                    OV5640_DEFAULT_LINK_FREQ,
-                    ov5640_csi2_link_freqs);
+    // ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, ops,
+    //                 V4L2_CID_LINK_FREQ,
+    //                 ARRAY_SIZE(dscam6_csi2_link_freqs) - 1,
+    //                 DSCAM6_DEFAULT_LINK_FREQ,
+    //                 dscam6_csi2_link_freqs);
 
-    timings = ov5640_timings(sensor, mode);
-    hblank = timings->htot - mode->width;
-    ctrls->hblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK, hblank,
-                      hblank, 1, hblank);
+    // timings = dscam6_timings(sensor, mode);
+    // hblank = timings->htot - mode->width;
+    // ctrls->hblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK, hblank,
+    //                   hblank, 1, hblank);
 
-    max_vblank = OV5640_MAX_VTS - mode->height;
-    ctrls->vblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VBLANK,
-                      OV5640_MIN_VBLANK, max_vblank,
-                      1, timings->vblank_def);
+    // max_vblank = DSCAM6_MAX_VTS - mode->height;
+    // ctrls->vblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VBLANK,
+    //                   DSCAM6_MIN_VBLANK, max_vblank,
+    //                   1, timings->vblank_def);
 
     /* Auto/manual white balance */
-    ctrls->auto_wb = v4l2_ctrl_new_std(hdl, ops,
-                       V4L2_CID_AUTO_WHITE_BALANCE,
-                       0, 1, 1, 1);
-    ctrls->blue_balance = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_BLUE_BALANCE,
-                        0, 4095, 1, 0);
-    ctrls->red_balance = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_RED_BALANCE,
-                           0, 4095, 1, 0);
+    // ctrls->auto_wb = v4l2_ctrl_new_std(hdl, ops,
+    //                    V4L2_CID_AUTO_WHITE_BALANCE,
+    //                    0, 1, 1, 1);
+    // ctrls->blue_balance = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_BLUE_BALANCE,
+    //                     0, 4095, 1, 0);
+    // ctrls->red_balance = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_RED_BALANCE,
+    //                        0, 4095, 1, 0);
     /* Auto/manual exposure */
-    ctrls->auto_exp = v4l2_ctrl_new_std_menu(hdl, ops,
-                         V4L2_CID_EXPOSURE_AUTO,
-                         V4L2_EXPOSURE_MANUAL, 0,
-                         V4L2_EXPOSURE_AUTO);
-    ctrls->exposure = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE,
-                        0, 65535, 1, 0);
+    // ctrls->auto_exp = v4l2_ctrl_new_std_menu(hdl, ops,
+    //                      V4L2_CID_EXPOSURE_AUTO,
+    //                      V4L2_EXPOSURE_MANUAL, 0,
+    //                      V4L2_EXPOSURE_AUTO);
+    // ctrls->exposure = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE,
+    //                     0, 65535, 1, 0);
     /* Auto/manual gain */
-    ctrls->auto_gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_AUTOGAIN,
-                         0, 1, 1, 1);
-    ctrls->gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN,
-                    0, 1023, 1, 0);
+    // ctrls->auto_gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_AUTOGAIN,
+    //                      0, 1, 1, 1);
+    // ctrls->gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN,
+    //                 0, 1023, 1, 0);
 
-    ctrls->saturation = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_SATURATION,
-                          0, 255, 1, 64);
-    ctrls->hue = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HUE,
-                       0, 359, 1, 0);
-    ctrls->contrast = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_CONTRAST,
-                        0, 255, 1, 0);
-    ctrls->test_pattern =
-        v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
-                         ARRAY_SIZE(test_pattern_menu) - 1,
-                         0, 0, test_pattern_menu);
-    ctrls->hflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
-                     0, 1, 1, 0);
-    ctrls->vflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP,
-                     0, 1, 1, 0);
+    // ctrls->saturation = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_SATURATION,
+    //                       0, 255, 1, 64);
+    // ctrls->hue = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HUE,
+    //                    0, 359, 1, 0);
+    // ctrls->contrast = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_CONTRAST,
+    //                     0, 255, 1, 0);
+    // ctrls->test_pattern =
+    //     v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_TEST_PATTERN,
+    //                      ARRAY_SIZE(test_pattern_menu) - 1,
+    //                      0, 0, test_pattern_menu);
+    // ctrls->hflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP,
+    //                  0, 1, 1, 0);
+    // ctrls->vflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP,
+    //                  0, 1, 1, 0);
 
-    ctrls->light_freq =
-        v4l2_ctrl_new_std_menu(hdl, ops,
-                       V4L2_CID_POWER_LINE_FREQUENCY,
-                       V4L2_CID_POWER_LINE_FREQUENCY_AUTO, 0,
-                       V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
+    // ctrls->light_freq =
+    //     v4l2_ctrl_new_std_menu(hdl, ops,
+    //                    V4L2_CID_POWER_LINE_FREQUENCY,
+    //                    V4L2_CID_POWER_LINE_FREQUENCY_AUTO, 0,
+    //                    V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
 
     if (hdl->error) {
         ret = hdl->error;
@@ -3357,17 +3436,17 @@ static int ov5640_init_controls(struct ov5640_dev *sensor)
     if (ret)
         goto free_ctrls;
 
-    ctrls->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
-    ctrls->pixel_rate->flags |= V4L2_CTRL_FLAG_VOLATILE;
-    ctrls->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
-    ctrls->link_freq->flags |= V4L2_CTRL_FLAG_VOLATILE;
-    ctrls->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
-    ctrls->gain->flags |= V4L2_CTRL_FLAG_VOLATILE;
-    ctrls->exposure->flags |= V4L2_CTRL_FLAG_VOLATILE;
+    // ctrls->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+    // ctrls->pixel_rate->flags |= V4L2_CTRL_FLAG_VOLATILE;
+    // ctrls->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+    // ctrls->link_freq->flags |= V4L2_CTRL_FLAG_VOLATILE;
+    // ctrls->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+    // ctrls->gain->flags |= V4L2_CTRL_FLAG_VOLATILE;
+    // ctrls->exposure->flags |= V4L2_CTRL_FLAG_VOLATILE;
 
-    v4l2_ctrl_auto_cluster(3, &ctrls->auto_wb, 0, false);
-    v4l2_ctrl_auto_cluster(2, &ctrls->auto_gain, 0, true);
-    v4l2_ctrl_auto_cluster(2, &ctrls->auto_exp, 1, true);
+    // v4l2_ctrl_auto_cluster(3, &ctrls->auto_wb, 0, false);
+    // v4l2_ctrl_auto_cluster(2, &ctrls->auto_gain, 0, true);
+    // v4l2_ctrl_auto_cluster(2, &ctrls->auto_exp, 1, true);
 
     sensor->sd.ctrl_handler = hdl;
     return 0;
@@ -3377,57 +3456,51 @@ free_ctrls:
     return ret;
 }
 
-static int ov5640_enum_frame_size(struct v4l2_subdev *sd,
-                  struct v4l2_subdev_state *sd_state,
-                  struct v4l2_subdev_frame_size_enum *fse)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    u32 bpp = ov5640_code_to_bpp(sensor, fse->code);
+static int dscam6_enum_frame_size(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_frame_size_enum *fse) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    u32 bpp = dscam6_code_to_bpp(sensor, fse->code);
     unsigned int index = fse->index;
 
+    csi_dev_dbg("enter %s\n", __func__);
     if (fse->pad != 0)
         return -EINVAL;
     if (!bpp)
         return -EINVAL;
 
     /* Only low-resolution modes are supported for 24bpp formats. */
-    if (bpp == 24 && index >= OV5640_MODE_720P_1280_720)
+    if (bpp == 24 && index >= DSCAM6_MODE_720P_1280_720)
         return -EINVAL;
 
     /* FIXME: Low resolution modes don't work in 8bpp formats. */
     if (bpp == 8)
-        index += OV5640_MODE_720P_1280_720;
+        index += DSCAM6_MODE_720P_1280_720;
 
-    if (index >= OV5640_NUM_MODES)
+    if (index >= DSCAM6_NUM_MODES)
         return -EINVAL;
 
-    fse->min_width = ov5640_mode_data[index].width;
+    fse->min_width = dscam6_mode_data[index].width;
     fse->max_width = fse->min_width;
-    fse->min_height = ov5640_mode_data[index].height;
+    fse->min_height = dscam6_mode_data[index].height;
     fse->max_height = fse->min_height;
 
     return 0;
 }
 
-static int ov5640_enum_frame_interval(
-    struct v4l2_subdev *sd,
-    struct v4l2_subdev_state *sd_state,
-    struct v4l2_subdev_frame_interval_enum *fie)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+static int dscam6_enum_frame_interval(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_frame_interval_enum *fie) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
     struct v4l2_fract tpf;
     int ret;
+    csi_dev_dbg("enter %s\n", __func__);
 
     if (fie->pad != 0)
         return -EINVAL;
-    if (fie->index >= OV5640_NUM_FRAMERATES)
+    if (fie->index >= DSCAM6_NUM_FRAMERATES)
         return -EINVAL;
 
     tpf.numerator = 1;
-    tpf.denominator = ov5640_framerates[fie->index];
+    tpf.denominator = dscam6_framerates[fie->index];
 
-    ret = ov5640_try_frame_interval(sensor, &tpf,
-                    fie->width, fie->height);
+    ret = dscam6_try_frame_interval(sensor, &tpf, fie->width, fie->height);
     if (ret < 0)
         return -EINVAL;
 
@@ -3435,10 +3508,9 @@ static int ov5640_enum_frame_interval(
     return 0;
 }
 
-static int ov5640_g_frame_interval(struct v4l2_subdev *sd,
-                   struct v4l2_subdev_frame_interval *fi)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+static int dscam6_g_frame_interval(struct v4l2_subdev *sd, struct v4l2_subdev_frame_interval *fi) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    csi_dev_dbg("enter %s\n", __func__);
 
     mutex_lock(&sensor->lock);
     fi->interval = sensor->frame_interval;
@@ -3447,12 +3519,11 @@ static int ov5640_g_frame_interval(struct v4l2_subdev *sd,
     return 0;
 }
 
-static int ov5640_s_frame_interval(struct v4l2_subdev *sd,
-                   struct v4l2_subdev_frame_interval *fi)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_mode_info *mode;
+static int dscam6_s_frame_interval(struct v4l2_subdev *sd, struct v4l2_subdev_frame_interval *fi) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_mode_info *mode;
     int frame_rate, ret = 0;
+    csi_dev_dbg("enter %s\n", __func__);
 
     if (fi->pad != 0)
         return -EINVAL;
@@ -3466,54 +3537,49 @@ static int ov5640_s_frame_interval(struct v4l2_subdev *sd,
 
     mode = sensor->current_mode;
 
-    frame_rate = ov5640_try_frame_interval(sensor, &fi->interval,
-                           mode->width,
-                           mode->height);
+    frame_rate = dscam6_try_frame_interval(sensor, &fi->interval, mode->width, mode->height);
     if (frame_rate < 0) {
         /* Always return a valid frame interval value */
         fi->interval = sensor->frame_interval;
         goto out;
     }
 
-    mode = ov5640_find_mode(sensor, mode->width, mode->height, true);
+    mode = dscam6_find_mode(sensor, mode->width, mode->height, true);
     if (!mode) {
         ret = -EINVAL;
         goto out;
     }
 
-    if (ov5640_framerates[frame_rate] > ov5640_framerates[mode->max_fps]) {
+    if (dscam6_framerates[frame_rate] > dscam6_framerates[mode->max_fps]) {
         ret = -EINVAL;
         goto out;
     }
 
-    if (mode != sensor->current_mode ||
-        frame_rate != sensor->current_fr) {
+    if (mode != sensor->current_mode || frame_rate != sensor->current_fr) {
         sensor->current_fr = frame_rate;
         sensor->frame_interval = fi->interval;
         sensor->current_mode = mode;
         sensor->pending_mode_change = true;
 
-        ov5640_update_pixel_rate(sensor);
+        dscam6_update_pixel_rate(sensor);
     }
 out:
     mutex_unlock(&sensor->lock);
     return ret;
 }
 
-static int ov5640_enum_mbus_code(struct v4l2_subdev *sd,
-                 struct v4l2_subdev_state *sd_state,
-                 struct v4l2_subdev_mbus_code_enum *code)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    const struct ov5640_pixfmt *formats;
+static int dscam6_enum_mbus_code(struct v4l2_subdev *sd, struct v4l2_subdev_state *sd_state, struct v4l2_subdev_mbus_code_enum *code) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    const struct dscam6_pixfmt *formats;
     unsigned int num_formats;
+    csi_dev_dbg("enter %s\n", __func__);
 
-    if (ov5640_is_csi2(sensor)) {
-        formats = ov5640_csi2_formats;
-        num_formats = ARRAY_SIZE(ov5640_csi2_formats) - 1;
+    if (dscam6_is_csi2(sensor)) {
+        formats = dscam6_csi2_formats;
+        num_formats = ARRAY_SIZE(dscam6_csi2_formats) - 1;
     } else {
-        formats = ov5640_dvp_formats;
-        num_formats = ARRAY_SIZE(ov5640_dvp_formats) - 1;
+        formats = dscam6_dvp_formats;
+        num_formats = ARRAY_SIZE(dscam6_dvp_formats) - 1;
     }
 
     if (code->index >= num_formats)
@@ -3524,43 +3590,42 @@ static int ov5640_enum_mbus_code(struct v4l2_subdev *sd,
     return 0;
 }
 
-static int ov5640_s_stream(struct v4l2_subdev *sd, int enable)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+static int dscam6_s_stream(struct v4l2_subdev *sd, int enable) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
     int delay;
     int ret = 0;
 
+    csi_dev_dbg("enter %s\n", __func__);
 
     mutex_lock(&sensor->lock);
 
     // %DS%
-	printk("dscam6::s_stream:streaming=%d,mode=0x%x,frame rate=%d,enable=%d\n",sensor->streaming,sensor->current_mode->id, sensor->current_fr,enable);
-
+    printk("dscam6::s_stream:streaming=%d,mode=0x%x,frame rate=%d,enable=%d\n", sensor->streaming, sensor->current_mode->id, sensor->current_fr, enable);
 
     if (sensor->streaming == !enable) {
-        printk("dscam6::ov5640_s_stream 1 >>> \n");
+        printk("dscam6::dscam6_s_stream 1 >>> \n");
 
         if (enable && sensor->pending_mode_change) {
-            ret = ov5640_set_mode(sensor);
+            ret = dscam6_set_mode(sensor);
             if (ret)
                 goto out;
         }
 
-        printk("dscam6::ov5640_s_stream 2\n");
+        printk("dscam6::dscam6_s_stream 2\n");
         if (enable && sensor->pending_fmt_change) {
-            ret = ov5640_set_framefmt(sensor, &sensor->fmt);
+            ret = dscam6_set_framefmt(sensor, &sensor->fmt);
             if (ret)
                 goto out;
             sensor->pending_fmt_change = false;
         }
-        printk("dscam6::ov5640_s_stream 3\n");
+        printk("dscam6::dscam6_s_stream 3\n");
 
-        if (ov5640_is_csi2(sensor))
-            ret = ov5640_set_stream_mipi(sensor, enable);
+        if (dscam6_is_csi2(sensor))
+            ret = dscam6_set_stream_mipi(sensor, enable);
         else
-            ret = ov5640_set_stream_dvp(sensor, enable);
+            ret = dscam6_set_stream_dvp(sensor, enable);
 
-        printk("dscam6::ov5640_s_stream 4\n");
+        printk("dscam6::dscam6_s_stream 4\n");
 
         if (!ret)
             sensor->streaming = enable;
@@ -3573,92 +3638,84 @@ out:
     mutex_unlock(&sensor->lock);
 
     // %DS%
-	printk("dscam6::s_stream finished, ret=%d\n",ret);
+    printk("dscam6::s_stream finished, ret=%d\n", ret);
     return 0;
 }
 
-static int ov5640_init_cfg(struct v4l2_subdev *sd,
-               struct v4l2_subdev_state *state)
-{
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
-    struct v4l2_mbus_framefmt *fmt =
-                v4l2_subdev_get_try_format(sd, state, 0);
+static int dscam6_init_cfg(struct v4l2_subdev *sd, struct v4l2_subdev_state *state) {
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
+    struct v4l2_mbus_framefmt *fmt = v4l2_subdev_get_try_format(sd, state, 0);
     struct v4l2_rect *crop = v4l2_subdev_get_try_crop(sd, state, 0);
 
-    *fmt = ov5640_is_csi2(sensor) ? ov5640_mipi_default_fmt :
-                    ov5640_dvp_default_fmt;
+    *fmt = dscam6_is_csi2(sensor) ? dscam6_mipi_default_fmt : dscam6_dvp_default_fmt;
 
-    crop->left = OV5640_PIXEL_ARRAY_LEFT;
-    crop->top = OV5640_PIXEL_ARRAY_TOP;
-    crop->width = OV5640_PIXEL_ARRAY_WIDTH;
-    crop->height = OV5640_PIXEL_ARRAY_HEIGHT;
+    csi_dev_dbg("enter %s\n", __func__);
+
+    crop->left = DSCAM6_PIXEL_ARRAY_LEFT;
+    crop->top = DSCAM6_PIXEL_ARRAY_TOP;
+    crop->width = DSCAM6_PIXEL_ARRAY_WIDTH;
+    crop->height = DSCAM6_PIXEL_ARRAY_HEIGHT;
 
     return 0;
 }
 
-static const struct v4l2_subdev_core_ops ov5640_core_ops = {
-    .s_power = ov5640_s_power,
+static const struct v4l2_subdev_core_ops dscam6_core_ops = {
+    .s_power = dscam6_s_power,
     .log_status = v4l2_ctrl_subdev_log_status,
     .subscribe_event = v4l2_ctrl_subdev_subscribe_event,
     .unsubscribe_event = v4l2_event_subdev_unsubscribe,
 };
 
-static const struct v4l2_subdev_video_ops ov5640_video_ops = {
-    .g_frame_interval = ov5640_g_frame_interval,
-    .s_frame_interval = ov5640_s_frame_interval,
-    .s_stream = ov5640_s_stream,
+static const struct v4l2_subdev_video_ops dscam6_video_ops = {
+    .g_frame_interval = dscam6_g_frame_interval,
+    .s_frame_interval = dscam6_s_frame_interval,
+    .s_stream = dscam6_s_stream,
 };
 
-static const struct v4l2_subdev_pad_ops ov5640_pad_ops = {
-    .init_cfg = ov5640_init_cfg,
-    .enum_mbus_code = ov5640_enum_mbus_code,
-    .get_fmt = ov5640_get_fmt,
-    .set_fmt = ov5640_set_fmt,
-    .get_selection = ov5640_get_selection,
-    .enum_frame_size = ov5640_enum_frame_size,
-    .enum_frame_interval = ov5640_enum_frame_interval,
+static const struct v4l2_subdev_pad_ops dscam6_pad_ops = {
+    .init_cfg = dscam6_init_cfg,
+    .enum_mbus_code = dscam6_enum_mbus_code,
+    .get_fmt = dscam6_get_fmt,
+    .set_fmt = dscam6_set_fmt,
+    // .get_selection = dscam6_get_selection,
+    .enum_frame_size = dscam6_enum_frame_size,
+    .enum_frame_interval = dscam6_enum_frame_interval,
 };
 
-static const struct v4l2_subdev_ops ov5640_subdev_ops = {
-    .core = &ov5640_core_ops,
-    .video = &ov5640_video_ops,
-    .pad = &ov5640_pad_ops,
+static const struct v4l2_subdev_ops dscam6_subdev_ops = {
+    .core = &dscam6_core_ops,
+    .video = &dscam6_video_ops,
+    .pad = &dscam6_pad_ops,
 };
 
-static int ov5640_link_setup(struct media_entity *entity,
-               const struct media_pad *local,
-               const struct media_pad *remote, u32 flags)
-{
-    return 0;
-}
+static int dscam6_link_setup(struct media_entity *entity, const struct media_pad *local, const struct media_pad *remote, u32 flags) { return 0; }
 
-static const struct media_entity_operations ov5640_sd_media_ops = {
-    .link_setup = ov5640_link_setup,
+static const struct media_entity_operations dscam6_sd_media_ops = {
+    .link_setup = dscam6_link_setup,
 };
 
-static int ov5640_get_regulators(struct ov5640_dev *sensor)
-{
+static int dscam6_get_regulators(struct dscam6_dev *sensor) {
     int i;
+    csi_dev_dbg("enter %s\n", __func__);
+    for (i = 0; i < DSCAM6_NUM_SUPPLIES; i++)
+        sensor->supplies[i].supply = dscam6_supply_name[i];
 
-    for (i = 0; i < OV5640_NUM_SUPPLIES; i++)
-        sensor->supplies[i].supply = ov5640_supply_name[i];
-
-    return devm_regulator_bulk_get(&sensor->i2c_client->dev,
-                       OV5640_NUM_SUPPLIES,
-                       sensor->supplies);
+    return devm_regulator_bulk_get(&sensor->i2c_client->dev, DSCAM6_NUM_SUPPLIES, sensor->supplies);
 }
 
-static int ov5640_check_chip_id(struct ov5640_dev *sensor)
-{
+static int dscam6_check_chip_id(struct dscam6_dev *sensor) {
+    csi_dev_dbg("enter %s\n", __func__);
+    return 0;
+#if 0
     struct i2c_client *client = sensor->i2c_client;
     int ret = 0;
     u16 chip_id;
 
-    ret = ov5640_set_power_on(sensor);
+    ret = dscam6_set_power_on(sensor);
     if (ret)
         return ret;
 
-    ret = ov5640_read_reg16(sensor, OV5640_REG_CHIP_ID, &chip_id);
+    ret = dscam6_read_reg16(sensor, DSCAM6_REG_CHIP_ID, &chip_id);
     if (ret) {
         dev_err(&client->dev, "%s: failed to read chip identifier\n",
             __func__);
@@ -3673,19 +3730,19 @@ static int ov5640_check_chip_id(struct ov5640_dev *sensor)
     // }
 
 power_off:
-    ov5640_set_power_off(sensor);
+    dscam6_set_power_off(sensor);
     return ret;
+#endif
 }
 
-static int dscam6_probe(struct i2c_client *client)
-{
+static int dscam6_probe(struct i2c_client *client) {
     struct device *dev = &client->dev;
     struct fwnode_handle *endpoint;
-    struct ov5640_dev *sensor;
+    struct dscam6_dev *sensor;
     int ret;
-
+    csi_dev_dbg("enter %s\n", __func__);
     dev_info(&client->dev, "%s: hello from dscam6\n", __func__);
-    //printk("dscam6::Hello again\n");
+    // printk("dscam6::Hello again\n");
 
     sensor = devm_kzalloc(dev, sizeof(*sensor), GFP_KERNEL);
     if (!sensor)
@@ -3698,26 +3755,23 @@ static int dscam6_probe(struct i2c_client *client)
      * YUV422 UYVY VGA@30fps
      */
     sensor->frame_interval.numerator = 1;
-    sensor->frame_interval.denominator = ov5640_framerates[OV5640_30_FPS];
-    sensor->current_fr = OV5640_30_FPS;
-    sensor->current_mode =
-        &ov5640_mode_data[OV5640_MODE_VGA_640_480];
+    sensor->frame_interval.denominator = dscam6_framerates[DSCAM6_30_FPS];
+    sensor->current_fr = DSCAM6_30_FPS;
+    sensor->current_mode = &dscam6_mode_data[DSCAM6_MODE_VGA_640_480];
     sensor->last_mode = sensor->current_mode;
-    sensor->current_link_freq =
-        ov5640_csi2_link_freqs[OV5640_DEFAULT_LINK_FREQ];
+    sensor->current_link_freq = dscam6_csi2_link_freqs[DSCAM6_DEFAULT_LINK_FREQ];
 
-    //printk("dscam6::probe 1\n");
+    // printk("dscam6::probe 1\n");
 
     sensor->ae_target = 52;
 
-    endpoint = fwnode_graph_get_next_endpoint(dev_fwnode(&client->dev),
-                          NULL);
+    endpoint = fwnode_graph_get_next_endpoint(dev_fwnode(&client->dev), NULL);
     if (!endpoint) {
         dev_err(dev, "endpoint node not found\n");
         return -EINVAL;
     }
 
-    //printk("dscam6::probe 2\n");
+    // printk("dscam6::probe 2\n");
 
     ret = v4l2_fwnode_endpoint_parse(endpoint, &sensor->ep);
     fwnode_handle_put(endpoint);
@@ -3726,15 +3780,12 @@ static int dscam6_probe(struct i2c_client *client)
         return ret;
     }
 
-    if (sensor->ep.bus_type != V4L2_MBUS_PARALLEL &&
-        sensor->ep.bus_type != V4L2_MBUS_CSI2_DPHY &&
-        sensor->ep.bus_type != V4L2_MBUS_BT656) {
+    if (sensor->ep.bus_type != V4L2_MBUS_PARALLEL && sensor->ep.bus_type != V4L2_MBUS_CSI2_DPHY && sensor->ep.bus_type != V4L2_MBUS_BT656) {
         dev_err(dev, "Unsupported bus type %d\n", sensor->ep.bus_type);
         return -EINVAL;
     }
 
-    sensor->fmt = ov5640_is_csi2(sensor) ? ov5640_mipi_default_fmt :
-                           ov5640_dvp_default_fmt;
+    sensor->fmt = dscam6_is_csi2(sensor) ? dscam6_mipi_default_fmt : dscam6_dvp_default_fmt;
 
 #if 0 
     /* get system clock (xclk) */
@@ -3744,51 +3795,46 @@ static int dscam6_probe(struct i2c_client *client)
         return PTR_ERR(sensor->xclk);
     }
     sensor->xclk_freq = clk_get_rate(sensor->xclk);
-    if (sensor->xclk_freq < OV5640_XCLK_MIN ||
-        sensor->xclk_freq > OV5640_XCLK_MAX) {
+    if (sensor->xclk_freq < DSCAM6_XCLK_MIN ||
+        sensor->xclk_freq > DSCAM6_XCLK_MAX) {
         dev_err(dev, "xclk frequency out of range: %d Hz\n",
             sensor->xclk_freq);
         return -EINVAL;
     }
-
+#endif
     /* request optional power down pin */
-    sensor->pwdn_gpio = devm_gpiod_get_optional(dev, "powerdown",
-                            GPIOD_OUT_HIGH);
+    sensor->pwdn_gpio = devm_gpiod_get_optional(dev, "powerdown", GPIOD_OUT_HIGH);
     if (IS_ERR(sensor->pwdn_gpio))
         return PTR_ERR(sensor->pwdn_gpio);
 
     /* request optional reset pin */
-    sensor->reset_gpio = devm_gpiod_get_optional(dev, "reset",
-                             GPIOD_OUT_HIGH);
+    sensor->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
     if (IS_ERR(sensor->reset_gpio))
         return PTR_ERR(sensor->reset_gpio);
-#endif 
-    v4l2_i2c_subdev_init(&sensor->sd, client, &ov5640_subdev_ops);
 
-    sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE |
-                V4L2_SUBDEV_FL_HAS_EVENTS;
+    v4l2_i2c_subdev_init(&sensor->sd, client, &dscam6_subdev_ops);
+
+    sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
     sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
-    sensor->sd.entity.ops = &ov5640_sd_media_ops;
+    sensor->sd.entity.ops = &dscam6_sd_media_ops;
     sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
     ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
     if (ret)
         return ret;
-#if 0 
-    ret = ov5640_get_regulators(sensor);
+
+    ret = dscam6_get_regulators(sensor);
     if (ret)
         return ret;
-#endif 
 
     mutex_init(&sensor->lock);
-#if 0 
-    ret = ov5640_check_chip_id(sensor);
+    ret = dscam6_check_chip_id(sensor);
     if (ret)
         goto entity_cleanup;
 
-    ret = ov5640_init_controls(sensor);
+    ret = dscam6_init_controls(sensor);
     if (ret)
         goto entity_cleanup;
-#endif
+
     ret = v4l2_async_register_subdev_sensor(&sensor->sd);
     if (ret)
         goto free_ctrls;
@@ -3804,10 +3850,9 @@ entity_cleanup:
     return ret;
 }
 
-static void dscam6_remove(struct i2c_client *client)
-{
+static void dscam6_remove(struct i2c_client *client) {
     struct v4l2_subdev *sd = i2c_get_clientdata(client);
-    struct ov5640_dev *sensor = to_ov5640_dev(sd);
+    struct dscam6_dev *sensor = to_dscam6_dev(sd);
 
     v4l2_async_unregister_subdev(&sensor->sd);
     media_entity_cleanup(&sensor->sd.entity);
@@ -3821,20 +3866,18 @@ static const struct i2c_device_id dscam6_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, dscam6_id);
 
-static const struct of_device_id dscam6_dt_ids[] = {
-    { .compatible = "abyz,dscam6" },
-    { /* sentinel */ }
-};
+static const struct of_device_id dscam6_dt_ids[] = {{.compatible = "abyz,dscam6"}, {/* sentinel */}};
 MODULE_DEVICE_TABLE(of, dscam6_dt_ids);
 
 static struct i2c_driver dscam6_i2c_driver = {
-    .driver = {
-        .name  = "dscam6",
-        .of_match_table = dscam6_dt_ids,
-    },
+    .driver =
+        {
+            .name = "dscam6",
+            .of_match_table = dscam6_dt_ids,
+        },
     .id_table = dscam6_id,
     .probe_new = dscam6_probe,
-    .remove   = dscam6_remove,
+    .remove = dscam6_remove,
 };
 
 module_i2c_driver(dscam6_i2c_driver);

@@ -436,6 +436,7 @@ struct csi_state {
 	u8 wclk_ext;
 
 	//by mirika 
+	u8 clk_unalive;
 	u32 mipi_dphy_slave_control_h;
 	u32 mipi_dphy_slave_control_l;
 
