@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2019 NXP
+ * Copyright 2020-2021 Variscite Ltd.
+ */
+
+
+&ecspi2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi2>;
+	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>,
+			<&gpio4 31 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	spidev@0 {
+		compatible = "var,spidev";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+		status = "okay";
+	};
+
+	spi-dscam-fpga@1{
+		compatible="abyz,spi-dscam-fpga";
+		reg=<1>;
+		spi-max-frequency=<12000000>;
+		status="okay";
+	};
+
+};

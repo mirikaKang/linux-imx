@@ -467,6 +467,19 @@ config VIDEO_DSCAM6
 		This is a Video4Linux2 image driver for the H&Abyz X-ray detector
 		with MIPI CSI2 interface 
 
+config VIDEO_DSCAM
+    tristate "DSCAM Camera Driver"
+	depends on OF
+    depends on VIDEO_DEV && I2C
+    select MEDIA_CONTROLLER
+    select VIDEO_V4L2_SUBDEV_API
+    select V4L2_FWNODE
+    help
+      This is a driver for the DSCAM camera sensor with support for Virtual I2C, RAW16 format, and streaming control.
+
+      To compile this driver as a module, choose M here: the module
+      will be called dscam.
+
 config VIDEO_OV5645
 	tristate "OmniVision OV5645 sensor support"
 	depends on OF

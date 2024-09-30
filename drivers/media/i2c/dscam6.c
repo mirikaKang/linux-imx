@@ -50,95 +50,6 @@
 #define DSCAM6_PIXEL_ARRAY_WIDTH 2592
 #define DSCAM6_PIXEL_ARRAY_HEIGHT 1944
 
-#if 0
-/* min/typical/max system clock (xclk) frequencies */
-#define DSCAM6_XCLK_MIN 6000000
-#define DSCAM6_XCLK_MAX 54000000
-
-
-/* FIXME: not documented. */
-#define DSCAM6_MIN_VBLANK 24
-#define DSCAM6_MAX_VTS 3375
-
-#define DSCAM6_DEFAULT_SLAVE_ID 0x3c
-
-#define DSCAM6_LINK_RATE_MAX 490000000U
-
-#define DSCAM6_REG_SYS_RESET02 0x3002
-#define DSCAM6_REG_SYS_CLOCK_ENABLE02 0x3006
-#define DSCAM6_REG_SYS_CTRL0 0x3008
-#define DSCAM6_REG_SYS_CTRL0_SW_PWDN 0x42
-#define DSCAM6_REG_SYS_CTRL0_SW_PWUP 0x02
-#define DSCAM6_REG_SYS_CTRL0_SW_RST 0x82
-#define DSCAM6_REG_CHIP_ID 0x300a
-#define DSCAM6_REG_IO_MIPI_CTRL00 0x300e
-#define DSCAM6_REG_PAD_OUTPUT_ENABLE01 0x3017
-#define DSCAM6_REG_PAD_OUTPUT_ENABLE02 0x3018
-#define DSCAM6_REG_PAD_OUTPUT00 0x3019
-#define DSCAM6_REG_SYSTEM_CONTROL1 0x302e
-#define DSCAM6_REG_SC_PLL_CTRL0 0x3034
-#define DSCAM6_REG_SC_PLL_CTRL1 0x3035
-#define DSCAM6_REG_SC_PLL_CTRL2 0x3036
-#define DSCAM6_REG_SC_PLL_CTRL3 0x3037
-#define DSCAM6_REG_SLAVE_ID 0x3100
-#define DSCAM6_REG_SCCB_SYS_CTRL1 0x3103
-#define DSCAM6_REG_SYS_ROOT_DIVIDER 0x3108
-#define DSCAM6_REG_AWB_R_GAIN 0x3400
-#define DSCAM6_REG_AWB_G_GAIN 0x3402
-#define DSCAM6_REG_AWB_B_GAIN 0x3404
-#define DSCAM6_REG_AWB_MANUAL_CTRL 0x3406
-#define DSCAM6_REG_AEC_PK_EXPOSURE_HI 0x3500
-#define DSCAM6_REG_AEC_PK_EXPOSURE_MED 0x3501
-#define DSCAM6_REG_AEC_PK_EXPOSURE_LO 0x3502
-#define DSCAM6_REG_AEC_PK_MANUAL 0x3503
-#define DSCAM6_REG_AEC_PK_REAL_GAIN 0x350a
-#define DSCAM6_REG_AEC_PK_VTS 0x350c
-#define DSCAM6_REG_TIMING_HS 0x3800
-#define DSCAM6_REG_TIMING_VS 0x3802
-#define DSCAM6_REG_TIMING_HW 0x3804
-#define DSCAM6_REG_TIMING_VH 0x3806
-#define DSCAM6_REG_TIMING_DVPHO 0x3808
-#define DSCAM6_REG_TIMING_DVPVO 0x380a
-#define DSCAM6_REG_TIMING_HTS 0x380c
-#define DSCAM6_REG_TIMING_VTS 0x380e
-#define DSCAM6_REG_TIMING_HOFFS 0x3810
-#define DSCAM6_REG_TIMING_VOFFS 0x3812
-#define DSCAM6_REG_TIMING_TC_REG20 0x3820
-#define DSCAM6_REG_TIMING_TC_REG21 0x3821
-#define DSCAM6_REG_AEC_CTRL00 0x3a00
-#define DSCAM6_REG_AEC_B50_STEP 0x3a08
-#define DSCAM6_REG_AEC_B60_STEP 0x3a0a
-#define DSCAM6_REG_AEC_CTRL0D 0x3a0d
-#define DSCAM6_REG_AEC_CTRL0E 0x3a0e
-#define DSCAM6_REG_AEC_CTRL0F 0x3a0f
-#define DSCAM6_REG_AEC_CTRL10 0x3a10
-#define DSCAM6_REG_AEC_CTRL11 0x3a11
-#define DSCAM6_REG_AEC_CTRL1B 0x3a1b
-#define DSCAM6_REG_AEC_CTRL1E 0x3a1e
-#define DSCAM6_REG_AEC_CTRL1F 0x3a1f
-#define DSCAM6_REG_HZ5060_CTRL00 0x3c00
-#define DSCAM6_REG_HZ5060_CTRL01 0x3c01
-#define DSCAM6_REG_SIGMADELTA_CTRL0C 0x3c0c
-#define DSCAM6_REG_FRAME_CTRL01 0x4202
-#define DSCAM6_REG_FORMAT_CONTROL00 0x4300
-#define DSCAM6_REG_VFIFO_HSIZE 0x4602
-#define DSCAM6_REG_VFIFO_VSIZE 0x4604
-#define DSCAM6_REG_JPG_MODE_SELECT 0x4713
-#define DSCAM6_REG_CCIR656_CTRL00 0x4730
-#define DSCAM6_REG_POLARITY_CTRL00 0x4740
-#define DSCAM6_REG_MIPI_CTRL00 0x4800
-#define DSCAM6_REG_DEBUG_MODE 0x4814
-#define DSCAM6_REG_PCLK_PERIOD 0x4837
-#define DSCAM6_REG_ISP_FORMAT_MUX_CTRL 0x501f
-#define DSCAM6_REG_PRE_ISP_TEST_SET1 0x503d
-#define DSCAM6_REG_SDE_CTRL0 0x5580
-#define DSCAM6_REG_SDE_CTRL1 0x5581
-#define DSCAM6_REG_SDE_CTRL3 0x5583
-#define DSCAM6_REG_SDE_CTRL4 0x5584
-#define DSCAM6_REG_SDE_CTRL5 0x5585
-#define DSCAM6_REG_AVG_READOUT 0x56a1
-
-#endif
 
 enum dscam6_mode_id {
     DSCAM6_MODE_VGA_640_480 = 0,
@@ -428,31 +339,6 @@ struct dscam6_mode_info {
 
 struct dscam6_ctrls {
     struct v4l2_ctrl_handler handler;
-    // struct v4l2_ctrl *pixel_rate;
-    // struct v4l2_ctrl *link_freq;
-    // struct v4l2_ctrl *hblank;
-    // struct v4l2_ctrl *vblank;
-    // struct {
-    //     struct v4l2_ctrl *auto_exp;
-    //     struct v4l2_ctrl *exposure;
-    // };
-    // struct {
-    //     struct v4l2_ctrl *auto_wb;
-    //     struct v4l2_ctrl *blue_balance;
-    //     struct v4l2_ctrl *red_balance;
-    // };
-    // struct {
-    //     struct v4l2_ctrl *auto_gain;
-    //     struct v4l2_ctrl *gain;
-    // };
-    // struct v4l2_ctrl *brightness;
-    // struct v4l2_ctrl *light_freq;
-    // struct v4l2_ctrl *saturation;
-    // struct v4l2_ctrl *contrast;
-    // struct v4l2_ctrl *hue;
-    // struct v4l2_ctrl *test_pattern;
-    // struct v4l2_ctrl *hflip;
-    // struct v4l2_ctrl *vflip;
 };
 
 struct dscam6_dev {
@@ -3866,7 +3752,11 @@ static const struct i2c_device_id dscam6_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, dscam6_id);
 
-static const struct of_device_id dscam6_dt_ids[] = {{.compatible = "abyz,dscam6"}, {/* sentinel */}};
+static const struct of_device_id dscam6_dt_ids[] = 
+{
+    {.compatible = "abyz,dscam6"}, 
+    {/* sentinel */}
+};
 MODULE_DEVICE_TABLE(of, dscam6_dt_ids);
 
 static struct i2c_driver dscam6_i2c_driver = {

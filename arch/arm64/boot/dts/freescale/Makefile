@@ -161,6 +161,7 @@ dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-basler-isp0.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-m7.dtb
 
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-abyz-dscam6.dtb
+dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-abyz-dscam.dtb
 dtb-$(CONFIG_ARCH_MXC) += imx8mp-var-som-symphony-abyz-dscam6-reinstall.dtb
 
 imx8mp-var-som-1.x-symphony-dtbs := imx8mp-var-som-symphony.dtb imx8mp-var-som-1.x.dtbo
