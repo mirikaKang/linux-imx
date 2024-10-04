@@ -39,7 +39,7 @@
 		};
 	};
 
-	gpio-leds {
+	gpio_leds: gpio-leds {
 		compatible = "gpio-leds";
 		status = "okay";
 
@@ -258,6 +258,8 @@
 			line-name = "usb3_sel";
 		};
 	};
+
+	
 
 	ov5640_mipi0: ov5640_mipi@3c {
 		compatible = "ovti,ov5640";

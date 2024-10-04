@@ -5,6 +5,23 @@
  */
 
 
+&pca9534 {
+    usb3_sel_hog {
+        status = "disabled";
+    };
+};
+
+&gpio_leds {
+    status = "okay";
+
+    heartbeat {
+        label = "New Heartbeat";
+        linux,default-trigger = "none"; // Changing the trigger
+        gpios = <&gpio5 0 GPIO_ACTIVE_LOW>; // Redefining the GPIO pin and polarity
+    };
+};
+
+
 &ecspi2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi2>;
@@ -23,6 +40,7 @@
 		compatible="abyz,spi-dscam-fpga";
 		reg=<1>;
 		spi-max-frequency=<12000000>;
+		cs-gpios=<&gpio4 31 GPIO_ACTIVE_LOW>;
 		status="okay";
 	};
 

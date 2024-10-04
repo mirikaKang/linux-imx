@@ -2,7 +2,7 @@
 /*
  * Copyright 2019 NXP
  * Copyright 2020-2021 Variscite Ltd.
- * Copyright 2024-2025 Abyz inc.
+ * Copyright 2024-2025 H & Abyz.
  */
 
 #include <linux/module.h>
@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/completion.h>
+#include <linux/of_gpio.h>
 
 #define DEVICE_NAME "abyz_fpga_control_spi"
 
@@ -49,6 +50,10 @@ static struct class *abyz_spi_class = NULL;
 #define SPI_SET_BITS_PER_WORD _IOW(SPI_IOC_MAGIC, 3, uint8_t)
 #define SPI_GET_CONFIG _IOR(SPI_IOC_MAGIC, 4, struct spi_config)
 #define SPI_SET_CS_GPIO _IOW(SPI_IOC_MAGIC, 5, int)
+#define SPI_SET_CS_ACTIVE_HIGH _IO(SPI_IOC_MAGIC, 6)
+#define SPI_SET_NO_CS _IOW(SPI_IOC_MAGIC, 7, uint8_t)
+#define SPI_SET_CS_HIGH _IOW(SPI_IOC_MAGIC, 8, uint8_t)
+#define SPI_SET_CS_LOW _IOW(SPI_IOC_MAGIC, 9, uint8_t)
 
 static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static int device_open(struct inode *inode, struct file *file);
@@ -56,7 +61,7 @@ static int device_release(struct inode *inode, struct file *file);
 static ssize_t device_read(struct file *file, char __user *buffer, size_t length, loff_t *offset);
 static ssize_t device_write(struct file *file, const char __user *buffer, size_t length, loff_t *offset);
 static int abyz_spi_probe(struct spi_device *spi);
-static void  abyz_spi_remove(struct spi_device *spi);
+static void abyz_spi_remove(struct spi_device *spi);
 
 static ssize_t abyz_spi_sync(struct abyz_spi_dev *abyz_spi, struct spi_message *message, int timeout);
 static ssize_t abyz_spi_sync_write(struct abyz_spi_dev *abyz_spi, size_t len, int timeout);
@@ -96,6 +101,7 @@ static inline ssize_t abyz_spi_sync_write(struct abyz_spi_dev *abyz_spi, size_t 
 
     spi_message_init(&m);
     spi_message_add_tail(&t, &m);
+    dev_dbg(&abyz_spi->spi->dev, "Writing %zu bytes to SPI\n", len);
     return abyz_spi_sync(abyz_spi, &m, timeout);
 }
 
@@ -109,6 +115,7 @@ static inline ssize_t abyz_spi_sync_read(struct abyz_spi_dev *abyz_spi, size_t l
 
     spi_message_init(&m);
     spi_message_add_tail(&t, &m);
+    dev_dbg(&abyz_spi->spi->dev, "Reading %zu bytes from SPI\n", len);
     return abyz_spi_sync(abyz_spi, &m, timeout);
 }
 
@@ -165,6 +172,51 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             }
             gpio_direction_output(abyz_spi_device->cs_gpio, 1);
             dev_info(&spi->dev,"set CS GPIO=%d\n", abyz_spi_device->cs_gpio);
+            break;
+
+        case SPI_SET_NO_CS:
+            if (copy_from_user(&abyz_spi_device->config.mode, (uint8_t __user *)arg, sizeof(uint8_t)))
+                return -EFAULT;
+            if (abyz_spi_device->config.mode)
+                abyz_spi_device->spi->mode |= SPI_NO_CS;
+            else
+                abyz_spi_device->spi->mode &= ~SPI_NO_CS;
+
+            spi_setup(abyz_spi_device->spi);
+            dev_info(&spi->dev, "SPI_NO_CS mode %s\n", (abyz_spi_device->spi->mode & SPI_NO_CS) ? "enabled" : "disabled");
+            break;
+
+        case SPI_SET_CS_ACTIVE_HIGH:
+            if (copy_from_user(&abyz_spi_device->config.mode, (uint8_t __user *)arg, sizeof(uint8_t)))
+                return -EFAULT;
+
+            if (abyz_spi_device->config.mode)
+                abyz_spi_device->spi->mode |= SPI_CS_HIGH;
+            else
+                abyz_spi_device->spi->mode &= ~SPI_CS_HIGH;
+
+            spi_setup(abyz_spi_device->spi);
+            dev_info(&spi->dev, "SPI_CS_HIGH mode %s\n", (abyz_spi_device->spi->mode & SPI_CS_HIGH) ? "enabled" : "disabled");
+            break;
+
+        case SPI_SET_CS_LOW:
+            if (gpio_is_valid(abyz_spi_device->cs_gpio)) {
+                gpio_set_value(abyz_spi_device->cs_gpio, 0);
+                dev_dbg(&spi->dev, "CS GPIO %d set to LOW\n", abyz_spi_device->cs_gpio);
+            } else {
+                dev_err(&spi->dev, "Invalid GPIO for CS gpio_pin %d\n", abyz_spi_device->cs_gpio);
+                return -EINVAL;
+            }
+            break;
+
+        case SPI_SET_CS_HIGH:
+            if (gpio_is_valid(abyz_spi_device->cs_gpio)) {
+                gpio_set_value(abyz_spi_device->cs_gpio, 1);
+                dev_dbg(&spi->dev, "CS GPIO %d set to HIGH\n", abyz_spi_device->cs_gpio);
+            } else {
+                dev_err(&spi->dev, "Invalid GPIO for CS :%d \n", abyz_spi_device->cs_gpio);
+                return -EINVAL;
+            }
             break;
 
         default:
@@ -247,17 +299,8 @@ static ssize_t device_read(struct file *file, char __user *buffer, size_t length
     }
 
     mutex_lock(&abyz_spi_device->buf_lock);
-    if (abyz_spi_device->cs_gpio != -1) {
-	    if (gpio_is_valid(abyz_spi_device->cs_gpio))
-		    gpio_set_value(abyz_spi_device->cs_gpio, 0); // Set CS low
-    }
-
+    dev_dbg(&spi->dev, "Reading %zu bytes from SPI\n", length);
     status = abyz_spi_sync_read(abyz_spi_device, length, 1000);
-
-    if (abyz_spi_device->cs_gpio != -1) {
-	    if (gpio_is_valid(abyz_spi_device->cs_gpio))
-		    gpio_set_value(abyz_spi_device->cs_gpio, 1); // Set CS high
-    }
 
     if (status > 0) {
         unsigned long missing;
@@ -294,10 +337,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
     dev_dbg(&spi->dev,"[device_write] length=%zu, buffer_size=%u\n", length, bufsiz);
 
     mutex_lock(&abyz_spi_device->buf_lock);
-    if (abyz_spi_device->cs_gpio != -1) {
-	    if (gpio_is_valid(abyz_spi_device->cs_gpio))
-		    gpio_set_value(abyz_spi_device->cs_gpio, 0); // Set CS low
-    }
     memset(abyz_spi_device->tx_buffer,0,bufsiz);
     missing = copy_from_user(abyz_spi_device->tx_buffer, buffer, length);
     if (missing == 0)
@@ -305,10 +344,6 @@ static ssize_t device_write(struct file *file, const char __user *buffer, size_t
     else
         status = -EFAULT;
 
-    if (abyz_spi_device->cs_gpio != -1) {
-	    if (gpio_is_valid(abyz_spi_device->cs_gpio))
-		    gpio_set_value(abyz_spi_device->cs_gpio, 1); // Set CS high
-    }
     mutex_unlock(&abyz_spi_device->buf_lock);
 
     return status;
@@ -352,7 +387,10 @@ static int abyz_spi_probe(struct spi_device *spi) {
     }
 
     abyz_spi_device->spi = spi;
-    abyz_spi_device->cs_gpio=-1;
+    
+    abyz_spi_device->cs_gpio = of_get_named_gpio(spi->dev.of_node, "cs-gpios", 0);
+    dev_info(&spi->dev, "Probing SPI device. GPIO for CS = %d\n", abyz_spi_device->cs_gpio);
+
     mutex_init(&abyz_spi_device->buf_lock);
     init_completion(&abyz_spi_device->spi_done);
 
@@ -420,4 +458,4 @@ module_exit(abyz_spi_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("mirika74@gmail.com");
-MODULE_DESCRIPTION("Abyz DSCAM X-ray Detector FPGA Control SPI  Driver with IOCTL, Mutex, Read, and Write, with Dynamic Debug");
+MODULE_DESCRIPTION("Abyz DSCAM X-ray Detector FPGA Control SPI Driver with Extended IOCTL, Dynamic Debugging, and GPIO Management");
