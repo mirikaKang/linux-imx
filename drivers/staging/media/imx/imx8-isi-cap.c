@@ -32,6 +32,25 @@
 #include "imx8-common.h"
 #include "imx8-isi-fmt.h"
 
+#define DRIVER_NAME		"imx8-isi-cap"
+
+//for internel driver debug
+#define DEV_DBG_EN 1
+#if (DEV_DBG_EN == 1)
+#define cam_dev_dbg(x, arg...)                                                 \
+	printk("[CAM_DEBUG][%s]"                                               \
+	       "[%06d]" x,                                                     \
+	       DRIVER_NAME, __LINE__, ##arg)
+#else
+#define cam_dev_dbg(x, arg...)
+#endif
+#define csi_dev_err(x, arg...)                                                 \
+	printk(KERN_ERR "[CAM_ERR][$s]"                                        \
+			"[%06d]" x,                                            \
+	       DRIVER_NAME, __LINE__, ##arg)
+#define cam_dev_print(x, arg...)                                               \
+	printk(KERN_INFO "[CAM][%s][%d]" x, DRIVER_NAME, __LINE__, ##arg)
+
 #define sd_to_cap_dev(ptr)	container_of(ptr, struct mxc_isi_cap_dev, sd)
 static int mxc_isi_cap_streamoff(struct file *file, void *priv,
 				 enum v4l2_buf_type type);

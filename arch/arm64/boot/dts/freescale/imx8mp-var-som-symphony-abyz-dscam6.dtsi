@@ -4,7 +4,11 @@
  * Copyright 2020-2021 Variscite Ltd.
  */
 
+#define DSCAM6_NOT_USED	0
+
 &i2c3{
+
+#if DSCAM6_NOT_USED 
 		ov5640_mipi0: ov5640_mipi@3c {
 		compatible = "ovti,ov5640";
 		reg = <0x3c>;
@@ -37,7 +41,9 @@
 		};
 	};
 
-#if 0
+#else
+	/delete-node/ov5640_mipi@3c; 
+
 	dscam6@58{
 		compatible="abyz,dscam6";
 		reg=<0x58>;
@@ -49,7 +55,7 @@
 		status = "okay";
 	
 		port{
-			dscam6_ep_0:endpoint{
+			dscam6_0_ep:endpoint{
 				data-lanes = < 1 2 3 4>;
 				clock-lanes = <0>;
 				remote-endpoint = <&mipi_csi0_ep>;
@@ -68,7 +74,11 @@
 	port@0 {
 		reg = <0>;
 		mipi_csi0_ep: endpoint {
+		#if DSCAM6_NOT_USED
 			remote-endpoint = <&ov5640_mipi_0_ep>;
+		#else
+			remote-endpoint = <&dscam6_0_ep>;
+		#endif
 			data-lanes = <4>;
 			csis-hs-settle = <6>;
 			csis-clk-settle = <2>;

@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2019 NXP
+ * Copyright 2020-2021 Variscite Ltd.
+ */
+
+#include "imx8mp-var-som-symphony.dts"
+#include "imx8mp-var-som-symphony-abyz-dscam.dtsi"
+#include "imx8mp-var-som-symphony-abyz-dscam-FPGA-Control.dtsi"
+/ {
+	model = "Variscite DART-MX8M-PLUS on Sympony with H&Abyz Xray detector supported and FPGA Control with SPI";
+};
+
+

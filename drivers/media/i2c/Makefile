@@ -143,5 +143,6 @@ obj-$(CONFIG_VIDEO_VPX3220) += vpx3220.o
 obj-$(CONFIG_VIDEO_VS6624) += vs6624.o
 obj-$(CONFIG_VIDEO_WM8739) += wm8739.o
 obj-$(CONFIG_VIDEO_WM8775) += wm8775.o
-obj-$(CONFIG_VIDEO_AP1302)     += ap1302.o
+obj-$(CONFIG_VIDEO_AP1302) += ap1302.o
 obj-$(CONFIG_VIDEO_DSCAM6) +=dscam6.o
+obj-$(CONFIG_VIDEO_DSCAM) +=dscam.o

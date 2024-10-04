@@ -16,6 +16,27 @@ MODULE_VERSION("1.0");
 
 #define	ISI_DOWNSCALE_THRESHOLD		0x4000
 
+
+#define DRIVER_NAME		"imx8-isi-cap"
+
+//for internel driver debug
+#define DEV_DBG_EN 1
+#if (DEV_DBG_EN == 1)
+#define cam_dev_dbg(x, arg...)                                                 \
+	printk("[CAM_DEBUG][%s]"                                               \
+	       "[%06d]" x,                                                     \
+	       DRIVER_NAME, __LINE__, ##arg)
+#else
+#define cam_dev_dbg(x, arg...)
+#endif
+#define csi_dev_err(x, arg...)                                                 \
+	printk(KERN_ERR "[CAM_ERR][$s]"                                        \
+			"[%06d]" x,                                            \
+	       DRIVER_NAME, __LINE__, ##arg)
+#define cam_dev_print(x, arg...)                                               \
+	printk(KERN_INFO "[CAM][%s][%d]" x, DRIVER_NAME, __LINE__, ##arg)
+
+
 #ifdef DEBUG
 void dump_isi_regs(struct mxc_isi_dev *mxc_isi)
 {
@@ -328,6 +349,8 @@ void mxc_isi_channel_set_csc(struct mxc_isi_dev *mxc_isi,
 	struct mxc_isi_fmt *src_fmt = src_f->fmt;
 	struct mxc_isi_fmt *dst_fmt = dst_f->fmt;
 	u32 val, csc = 0;
+
+	cam_dev_dbg("enter %s\n",__func__);
 
 	val = readl(mxc_isi->regs + CHNL_IMG_CTRL);
 	val &= ~(CHNL_IMG_CTRL_FORMAT_MASK |
