@@ -25,8 +25,9 @@
 &ecspi2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi2>;
-	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>,
-			<&gpio4 31 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>, //gpio 4 13 
+			<&gpio3 06 GPIO_ACTIVE_LOW>;    //gpio 2 6
+	fsl,spi-num-chipselects = <2>;
 	status = "okay";
 
 	spidev@0 {
@@ -40,8 +41,18 @@
 		compatible="abyz,spi-dscam-fpga";
 		reg=<1>;
 		spi-max-frequency=<12000000>;
-		cs-gpios=<&gpio4 31 GPIO_ACTIVE_LOW>;
+		cs-gpios=<&gpio3 06 GPIO_ACTIVE_LOW>;
 		status="okay";
 	};
 
+};
+
+&pinctrl_ecspi2 {
+    fsl,pins = <
+        MX8MP_IOMUXC_ECSPI2_SCLK__ECSPI2_SCLK    0x12
+        MX8MP_IOMUXC_ECSPI2_MOSI__ECSPI2_MOSI    0x12
+        MX8MP_IOMUXC_ECSPI2_MISO__ECSPI2_MISO    0x12
+        MX8MP_IOMUXC_ECSPI2_SS0__GPIO5_IO13      0x12        
+		MX8MP_IOMUXC_NAND_DATA00__GPIO3_IO06	 0x12
+    >;
 };

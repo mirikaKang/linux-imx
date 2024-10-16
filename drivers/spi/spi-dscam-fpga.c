@@ -177,12 +177,28 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         case SPI_SET_NO_CS:
             if (copy_from_user(&abyz_spi_device->config.mode, (uint8_t __user *)arg, sizeof(uint8_t)))
                 return -EFAULT;
-            if (abyz_spi_device->config.mode)
+            if (abyz_spi_device->config.mode) {
                 abyz_spi_device->spi->mode |= SPI_NO_CS;
+                
+            }
+
             else
                 abyz_spi_device->spi->mode &= ~SPI_NO_CS;
 
             spi_setup(abyz_spi_device->spi);
+            if( abyz_spi_device->spi->mode & SPI_NO_CS ) 
+            {
+                if (!gpio_is_valid(abyz_spi_device->cs_gpio)) {
+                    dev_err(&spi->dev, "Invalid GPIO: %d\n", abyz_spi_device->cs_gpio);
+                    return -EINVAL;
+                }
+                if (gpio_request(abyz_spi_device->cs_gpio, "cs_gpio")) {
+                    dev_err(&spi->dev, "Failed to request GPIO: %d\n", abyz_spi_device->cs_gpio);
+                    return -EBUSY;
+                }
+                gpio_direction_output(abyz_spi_device->cs_gpio, 1);
+
+            }
             dev_info(&spi->dev, "SPI_NO_CS mode %s\n", (abyz_spi_device->spi->mode & SPI_NO_CS) ? "enabled" : "disabled");
             break;
 
@@ -201,8 +217,9 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         case SPI_SET_CS_LOW:
             if (gpio_is_valid(abyz_spi_device->cs_gpio)) {
+                gpio_direction_output(abyz_spi_device->cs_gpio, 1);
                 gpio_set_value(abyz_spi_device->cs_gpio, 0);
-                dev_dbg(&spi->dev, "CS GPIO %d set to LOW\n", abyz_spi_device->cs_gpio);
+                dev_info(&spi->dev, "CS GPIO %d set to LOW\n", abyz_spi_device->cs_gpio);
             } else {
                 dev_err(&spi->dev, "Invalid GPIO for CS gpio_pin %d\n", abyz_spi_device->cs_gpio);
                 return -EINVAL;
@@ -211,8 +228,9 @@ static long device_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         case SPI_SET_CS_HIGH:
             if (gpio_is_valid(abyz_spi_device->cs_gpio)) {
+                gpio_direction_output(abyz_spi_device->cs_gpio, 1);
                 gpio_set_value(abyz_spi_device->cs_gpio, 1);
-                dev_dbg(&spi->dev, "CS GPIO %d set to HIGH\n", abyz_spi_device->cs_gpio);
+                dev_info(&spi->dev, "CS GPIO %d set to HIGH\n", abyz_spi_device->cs_gpio);
             } else {
                 dev_err(&spi->dev, "Invalid GPIO for CS :%d \n", abyz_spi_device->cs_gpio);
                 return -EINVAL;
